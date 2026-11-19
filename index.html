@@ -11,11 +11,11 @@
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;overflow:hidden}
-body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text',sans-serif;background:#0a0a0a;color:#e5e5e5;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom) 0}
-.header{padding:16px 16px 8px;display:flex;justify-content:space-between;align-items:flex-start}
+body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text',sans-serif;background:#0a0a0a;color:#e5e5e5;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom) 0;display:flex;flex-direction:column}
+.header{padding:16px 16px 8px;display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
 .header h1{font-size:22px;font-weight:700}
 .header .subtitle{font-size:13px;color:#888;margin-top:2px}
-.header-buttons{display:flex;gap:8px}
+.header-buttons{display:flex;gap:8px;flex-shrink:0}
 .btn{padding:8px 14px;border-radius:10px;border:none;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s}
 .btn-outline{background:transparent;border:1px solid #333;color:#e5e5e5}
 .btn-outline:active{background:#222}
@@ -55,7 +55,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text',sans-serif;backg
 .copy-plan-btn:active{background:#1a1a1a}
 .bottom-bar{position:fixed;bottom:0;left:0;right:0;background:#0a0a0a;border-top:1px solid #222;padding:12px 16px calc(12px + env(safe-area-inset-bottom));display:flex;gap:10px}
 .bottom-bar .btn{flex:1;padding:14px;font-size:14px}
-.hidden{display:none!important}
 .toast{position:fixed;top:60px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:10px 20px;border-radius:10px;font-size:13px;z-index:1000;opacity:0;transition:opacity .3s;pointer-events:none}
 .toast.show{opacity:1}
 input[type=file]{display:none}
@@ -96,7 +95,7 @@ input[type=file]{display:none}
 
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
-// ===== ДАННЫЕ =====
+// ===== ПЛАН (Вес, план / Повторения, план из Excel) =====
 const EXERCISES = {
   1: [
     {name:'Приседание со штангой',sets:[
@@ -202,24 +201,97 @@ const EXERCISES = {
   ]
 };
 
-const WEEKDAYS = ['воскресенье','понедельник','вторник','среда','четверг','пятница','суббота'];
-const WEEKDAYS_SHORT = ['вс','пн','вт','ср','чт','пт','сб'];
+// ===== ИСТОРИЯ ТРЕНИРОВОК ИЗ EXCEL (вшита, грузится при первом запуске) =====
+// Формат: 'дата': { day, ex: [ [ [вес,повт],... ] по каждому упражнению дня ] }
+const SEED_HISTORY = {
+  '2026-11-04': { day:2, ex:[
+    [[20,12],[65,8],[85,5],[85,10],[90,9],[95,7]],
+    [[99.6,8],[99.6,5],[99.6,6],[99.6,4]],
+    [[28,10],[30,8],[30,5],[28,5]],
+    [[59,10],[68,12],[73,12]],
+    [[50,12],[60,12]],
+    [[10,15],[12,17],[12,12]],
+    [[50,15],[54,15],[61,15]],
+    [[23,12],[27,12],[32,8]]
+  ]},
+  '2026-11-06': { day:3, ex:[
+    [[20,12],[30,12],[35,10]],
+    [[52,12],[68,12],[73,12],[73,11]],
+    [[111,12],[120,12],[129,12]],
+    [[10,15],[12,12],[10,15],[10,10]],
+    [[12,15],[14,15],[14,15]],
+    [[18,12],[20,6],[18,10]],
+    [[18,12],[23,12],[27,10]],
+    [[10,12],[12,12],[14,12],[14,6]],
+    [[41,12],[50,12],[54,12]],
+    [[36,15],[45,15]]
+  ]},
+  '2026-11-09': { day:1, ex:[
+    [[20,12],[60,8],[80,5],[100,8],[100,7],[100,7]],
+    [[20,10],[30,12],[40,12]],
+    [[0,15],[150,8],[200,12],[200,10],[200,10]],
+    [[73,12],[95,15],[107,13],[107,8]],
+    [[10,10],[10,10],[10,10]],
+    [[93,15],[102,15],[111,15],[111,15]],
+    []
+  ]},
+  '2026-11-11': { day:2, ex:[
+    [[20,12],[60,8],[75,4],[85,12],[90,9],[90,7]],
+    [[99.8,8],[99.8,7],[99.8,6],[99.8,5]],
+    [[24,10],[28,12],[28,6],[26,6]],
+    [[59,10],[73,12],[79,11]],
+    [[65,10],[65,10]],
+    [[10,15],[12,18],[12,15]],
+    [[54,15],[61,15],[68,12]],
+    [[27,15],[32,7],[32,8]]
+  ]},
+  '2026-11-13': { day:3, ex:[
+    [[20,12],[35,12],[37.5,10]],
+    [[52,12],[73,12],[79,8],[79,7]],
+    [[120,12],[129,12],[138,9]],
+    [[10,15],[10,17],[10,13],[10,11]],
+    [[14,14],[16,16],[16,13]],
+    [[14,12],[18,12],[18,10]],
+    [[18,12],[27,12],[27,10]],
+    [[10,12],[14,5],[12,10],[12,7]],
+    [[45,12],[54,12],[59,12]],
+    [[45,15],[50,15]]
+  ]},
+  '2026-11-16': { day:1, ex:[
+    [[20,12],[60,8],[80,5],[100,10],[100,9],[100,7]],
+    [[30,10],[40,10],[45,12]],
+    [[0,15],[150,8],[200,12],[200,11],[200,8]],
+    [[73,12],[100,15],[107,13],[107,9]],
+    [[145,12],[122,11],[109,13]],
+    [[102,15],[111,15],[120,14],[120,12]],
+    [[12,12],[16,12],[16,12],[16,12]]
+  ]},
+  '2026-11-18': { day:2, ex:[
+    [[20,12],[60,8],[75,4],[87.5,12],[90,10],[90,10]],
+    [[100,8],[100,8],[100,6],[100,5]],
+    [[24,10],[26,12],[26,9],[26,6]],
+    [[59,10],[79,12],[84,8]],
+    [[65,10],[65,10]],
+    [[10,15],[12,13],[12,10]],
+    [[54,15],[61,15],[68,13]],
+    [[32,12],[32,10],[32,9]]
+  ]}
+};
 
-// Состояние
+const WEEKDAYS = ['воскресенье','понедельник','вторник','среда','четверг','пятница','суббота'];
+
 let state = {
   currentDate: new Date(),
-  currentDay: null, // 1, 2 или 3
-  planDate: null,
-  history: {}, // { 'YYYY-MM-DD': { day: 1, exercises: { ... } } }
-  plan: JSON.parse(JSON.stringify(EXERCISES)) // текущий план
+  currentDay: null,
+  planDate: '2026-11-20',
+  history: {},
+  plan: JSON.parse(JSON.stringify(EXERCISES))
 };
 
 // ===== ИНИЦИАЛИЗАЦИЯ =====
 function init() {
   loadState();
-  if (!state.planDate) {
-    state.planDate = formatDate(new Date());
-  }
+  applySeedHistory();
   findCurrentDay();
   render();
 }
@@ -231,88 +303,81 @@ function loadState() {
       const parsed = JSON.parse(saved);
       state = { ...state, ...parsed };
       if (state.currentDate) state.currentDate = new Date(state.currentDate);
+      // план всегда берём из кода (если не было импорта)
+      if (!state.plan || !state.plan[1]) state.plan = JSON.parse(JSON.stringify(EXERCISES));
     }
   } catch(e) {}
 }
 
 function saveState() {
-  try {
-    localStorage.setItem('gymState', JSON.stringify(state));
-  } catch(e) {}
+  try { localStorage.setItem('gymState', JSON.stringify(state)); } catch(e) {}
+}
+
+// Вшиваем историю Excel, не перетирая то, что уже вбито вручную
+function applySeedHistory() {
+  Object.keys(SEED_HISTORY).forEach(dateKey => {
+    const seed = SEED_HISTORY[dateKey];
+    if (!state.history[dateKey]) {
+      state.history[dateKey] = { day: seed.day, exercises: {} };
+    }
+    seed.ex.forEach((setsArr, exIdx) => {
+      const exKey = `${seed.day}_${exIdx}`;
+      if (!state.history[dateKey].exercises[exKey]) state.history[dateKey].exercises[exKey] = {};
+      setsArr.forEach((wr, setIdx) => {
+        const setKey = `${exIdx}_${setIdx}`;
+        const existing = state.history[dateKey].exercises[exKey][setKey];
+        if (!existing || (existing.w === '' && existing.r === '')) {
+          state.history[dateKey].exercises[exKey][setKey] = { w: wr[0], r: wr[1] };
+        }
+      });
+    });
+  });
+  saveState();
 }
 
 function formatDate(d) {
-  const dd = String(d.getDate()).padStart(2,'0');
-  const mm = String(d.getMonth()+1).padStart(2,'0');
-  const yyyy = d.getFullYear();
-  return `${yyyy}-${mm}-${dd}`;
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
-
 function formatDateDisplay(d) {
   return `${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')}.${d.getFullYear()}`;
 }
-
 function formatDateShort(d) {
   return `${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')}`;
 }
 
-// Умный календарь: найти ближайший тренировочный день
+// Умный календарь: Пн=День1, Ср=День2, Пт=День3; остальные дни -> ближайший тренировочный вперёд
 function findCurrentDay() {
-  const today = new Date(state.currentDate);
-  const dayOfWeek = today.getDay(); // 0=вс, 1=пн, 2=вт, 3=ср, 4=чт, 5=пт, 6=сб
-  
-  // Пн(1)->День1, Ср(3)->День2, Пт(5)->День3
-  const dayMap = {1:1, 3:2, 5:3};
-  
-  if (dayMap[dayOfWeek]) {
-    state.currentDay = dayMap[dayOfWeek];
-  } else {
-    // Найти ближайший тренировочный день
-    const offsets = [
-      {days:1,day:1}, {days:2,day:2}, {days:4,day:3}, // от вс
-      {days:2,day:2}, {days:1,day:3}, // от вт
-      {days:1,day:3}, {days:2,day:1}, // от чт
-      {days:3,day:1}, {days:2,day:2}  // от сб
-    ];
-    const offset = offsets[dayOfWeek];
-    const targetDate = new Date(today);
-    targetDate.setDate(today.getDate() + offset.days);
-    state.currentDate = targetDate;
-    state.currentDay = offset.day;
-  }
+  const d = new Date(state.currentDate);
+  const dow = d.getDay();
+  const map = {1:1, 3:2, 5:3};
+  if (map[dow]) { state.currentDay = map[dow]; return; }
+  const skip = {0:[1,1], 2:[1,2], 4:[1,3], 6:[2,1]}; // [дней_вперёд, номер дня]
+  const s = skip[dow];
+  d.setDate(d.getDate() + s[0]);
+  state.currentDate = d;
+  state.currentDay = s[1];
 }
 
-// Навигация по дням
-function navigateDay(direction) {
+function navigateDay(dir) {
   const d = new Date(state.currentDate);
-  d.setDate(d.getDate() + direction);
+  d.setDate(d.getDate() + dir);
   state.currentDate = d;
   findCurrentDay();
   render();
 }
 
-function selectDay(dayNum) {
-  state.currentDay = dayNum;
-  render();
-}
+function selectDay(n) { state.currentDay = n; render(); }
 
 // ===== РЕНДЕР =====
 function render() {
-  renderHeader();
-  renderCalendar();
-  renderDayTabs();
-  renderWorkout();
-  saveState();
+  renderHeader(); renderCalendar(); renderDayTabs(); renderWorkout(); saveState();
 }
 
 function renderHeader() {
-  const planLabel = document.getElementById('planLabel');
-  if (state.planDate) {
-    const d = new Date(state.planDate);
-    planLabel.textContent = `План от ${formatDateShort(d)} · Excel ${state.history[formatDate(state.currentDate)] ? 'заполнен' : 'не открыт'}`;
-  } else {
-    planLabel.textContent = 'План не загружен';
-  }
+  const d = new Date(state.planDate);
+  const filled = !!state.history[formatDate(state.currentDate)];
+  document.getElementById('planLabel').textContent =
+    `План от ${formatDateShort(d)} · Excel ${filled ? 'заполнен' : 'не открыт'}`;
 }
 
 function renderCalendar() {
@@ -322,476 +387,266 @@ function renderCalendar() {
 }
 
 function renderDayTabs() {
-  const container = document.getElementById('dayTabs');
-  const d = state.currentDate;
-  
-  // Найти последние даты тренировок для каждого дня
   const lastDates = {};
-  const sortedDates = Object.keys(state.history).sort().reverse();
-  for (const dateStr of sortedDates) {
-    const day = state.history[dateStr].day;
-    if (!lastDates[day]) lastDates[day] = dateStr;
-  }
-  
-  const tabs = [
-    {num:1, label:`День 1${lastDates[1] ? ' посл. '+formatDateShort(new Date(lastDates[1])) : ''}`},
-    {num:2, label:`День 2${lastDates[2] ? ' посл. '+formatDateShort(new Date(lastDates[2])) : ''}`},
-    {num:3, label:`День 3${lastDates[3] ? ' посл. '+formatDateShort(new Date(lastDates[3])) : ''}`}
-  ];
-  
-  container.innerHTML = tabs.map(t => 
-    `<button class="day-tab ${t.num === state.currentDay ? 'active' : ''}" onclick="selectDay(${t.num})">${t.label}</button>`
-  ).join('');
+  Object.keys(state.history).sort().reverse().forEach(ds => {
+    const day = state.history[ds].day;
+    if (!lastDates[day]) lastDates[day] = ds;
+  });
+  const tabs = [1,2,3].map(n => {
+    const lbl = lastDates[n] ? ` посл. ${formatDateShort(new Date(lastDates[n]))}` : '';
+    return `<button class="day-tab ${n===state.currentDay?'active':''}" onclick="selectDay(${n})">День ${n}${lbl}</button>`;
+  });
+  document.getElementById('dayTabs').innerHTML = tabs.join('');
 }
 
 function renderWorkout() {
-  const container = document.getElementById('workoutArea');
   const exercises = state.plan[state.currentDay];
   const dateKey = formatDate(state.currentDate);
   const saved = state.history[dateKey];
   const prevDate = findPreviousWorkoutDate(state.currentDay, dateKey);
-  
+
   let html = `<div style="padding:12px 0 8px;font-size:14px;color:#888">
     <b style="color:#e5e5e5">${formatDateShort(state.currentDate)} · День ${state.currentDay}</b> — впишите вес и повторы в поля справа от каждого подхода
   </div>`;
-  
+
   exercises.forEach((ex, exIdx) => {
-    const totalSets = ex.sets.length;
-    const workingSets = ex.sets.filter(s => s.type === 'рабочий').length;
+    const working = ex.sets.filter(s=>s.type==='рабочий').length;
     const exKey = `${state.currentDay}_${exIdx}`;
     const savedEx = saved?.exercises?.[exKey];
-    
+
     html += `<div class="exercise-card">
-      <div class="exercise-header">
-        <h3>${ex.name}</h3>
-        <div class="meta">${totalSets} подх. · ${workingSets} раб.</div>
-      </div>`;
-    
-    if (ex.note) {
-      html += `<div class="exercise-note">${ex.note}</div>`;
-    }
-    
+      <div class="exercise-header"><h3>${ex.name}</h3><div class="meta">${ex.sets.length} подх. · ${working} раб.</div></div>`;
+    if (ex.note) html += `<div class="exercise-note">${ex.note}</div>`;
     html += `<div class="sets-header"><div></div><div></div><div>вес, кг</div><div>повт.</div></div>`;
-    
+
     ex.sets.forEach((set, setIdx) => {
       const setKey = `${exIdx}_${setIdx}`;
       const savedSet = savedEx?.[setKey];
       const prevSet = prevDate ? getPreviousSet(prevDate, state.currentDay, exIdx, setIdx) : null;
-      
-      const planW = set.planW;
-      const planR = set.planR;
-      const planWDisplay = typeof planW === 'number' ? planW : planW;
-      const planRDisplay = typeof planR === 'number' ? planR : planR;
-      
       const prevDisplay = prevSet ? `${formatDateShort(new Date(prevDate))}: ${prevSet.w} × ${prevSet.r}` : '';
-      
-      const actW = savedSet?.w ?? '';
+      const actW = (savedSet?.w ?? '') === 0 ? 0 : (savedSet?.w ?? '');
       const actR = savedSet?.r ?? '';
-      
+
       html += `<div class="set-row">
-        <div class="set-num">${setIdx + 1}</div>
+        <div class="set-num">${setIdx+1}</div>
         <div class="set-plan">
-          <div class="plan-main">план <b>${planWDisplay}</b> × <b>${planRDisplay}</b> <span class="plan-type">${set.type}</span></div>
+          <div class="plan-main">план <b>${set.planW}</b> × <b>${set.planR}</b> <span class="plan-type">${set.type}</span></div>
           ${prevDisplay ? `<div class="plan-prev">${prevDisplay}</div>` : ''}
         </div>
-        <div class="set-input">
-          <label>кг</label>
-          <input type="number" step="0.5" placeholder="—" value="${actW}" 
+        <div class="set-input"><label>кг</label>
+          <input type="number" step="0.5" placeholder="—" value="${actW}"
             onchange="saveSet('${dateKey}','${exKey}','${setKey}','w',this.value)"
-            oninput="saveSet('${dateKey}','${exKey}','${setKey}','w',this.value)">
-        </div>
-        <div class="set-input">
-          <label>повт</label>
+            oninput="saveSet('${dateKey}','${exKey}','${setKey}','w',this.value)"></div>
+        <div class="set-input"><label>повт</label>
           <input type="number" placeholder="—" value="${actR}"
             onchange="saveSet('${dateKey}','${exKey}','${setKey}','r',this.value)"
-            oninput="saveSet('${dateKey}','${exKey}','${setKey}','r',this.value)">
-        </div>
+            oninput="saveSet('${dateKey}','${exKey}','${setKey}','r',this.value)"></div>
       </div>`;
     });
-    
-    html += `<button class="copy-plan-btn" onclick="copyPlanForExercise(${state.currentDay},${exIdx})">Вес как в плане</button>`;
-    html += `</div>`;
+    html += `<button class="copy-plan-btn" onclick="copyPlanForExercise(${state.currentDay},${exIdx})">Вес как в плане</button></div>`;
   });
-  
-  container.innerHTML = html;
+  document.getElementById('workoutArea').innerHTML = html;
 }
 
 function findPreviousWorkoutDate(day, currentDate) {
-  const dates = Object.keys(state.history).filter(d => state.history[d].day === day && d < currentDate).sort().reverse();
-  return dates[0] || null;
+  return Object.keys(state.history).filter(d => state.history[d].day === day && d < currentDate).sort().reverse()[0] || null;
 }
-
 function getPreviousSet(prevDate, day, exIdx, setIdx) {
-  const exKey = `${day}_${exIdx}`;
-  const setKey = `${exIdx}_${setIdx}`;
-  return state.history[prevDate]?.exercises?.[exKey]?.[setKey] || null;
+  return state.history[prevDate]?.exercises?.[`${day}_${exIdx}`]?.[`${exIdx}_${setIdx}`] || null;
 }
 
-// ===== СОХРАНЕНИЕ ДАННЫХ =====
+// ===== СОХРАНЕНИЕ =====
 function saveSet(dateKey, exKey, setKey, field, value) {
-  if (!state.history[dateKey]) {
-    state.history[dateKey] = { day: state.currentDay, exercises: {} };
-  }
-  if (!state.history[dateKey].exercises[exKey]) {
-    state.history[dateKey].exercises[exKey] = {};
-  }
-  if (!state.history[dateKey].exercises[exKey][setKey]) {
-    state.history[dateKey].exercises[exKey][setKey] = {};
-  }
-  state.history[dateKey].exercises[exKey][setKey][field] = value ? (field === 'w' ? parseFloat(value) : parseInt(value)) : '';
-  saveState();
-  renderHeader();
+  if (!state.history[dateKey]) state.history[dateKey] = { day: state.currentDay, exercises: {} };
+  if (!state.history[dateKey].exercises[exKey]) state.history[dateKey].exercises[exKey] = {};
+  if (!state.history[dateKey].exercises[exKey][setKey]) state.history[dateKey].exercises[exKey][setKey] = {};
+  const v = value === '' ? '' : (field==='w' ? parseFloat(value) : parseInt(value));
+  state.history[dateKey].exercises[exKey][setKey][field] = isNaN(v) ? '' : v;
+  saveState(); renderHeader();
 }
 
-function copyPlanForExercise(dayNum, exIdx) {
-  const exercises = state.plan[dayNum];
-  const ex = exercises[exIdx];
-  const dateKey = formatDate(state.currentDate);
+function fillPlanFor(dateKey, dayNum, exIdx, ex) {
+  if (!state.history[dateKey]) state.history[dateKey] = { day: dayNum, exercises: {} };
   const exKey = `${dayNum}_${exIdx}`;
-  
-  if (!state.history[dateKey]) {
-    state.history[dateKey] = { day: dayNum, exercises: {} };
-  }
-  if (!state.history[dateKey].exercises[exKey]) {
-    state.history[dateKey].exercises[exKey] = {};
-  }
-  
+  if (!state.history[dateKey].exercises[exKey]) state.history[dateKey].exercises[exKey] = {};
   ex.sets.forEach((set, setIdx) => {
-    const setKey = `${exIdx}_${setIdx}`;
-    state.history[dateKey].exercises[exKey][setKey] = {
+    state.history[dateKey].exercises[exKey][`${exIdx}_${setIdx}`] = {
       w: set.planW === 'свой вес' ? '' : set.planW,
-      r: typeof set.planR === 'number' ? set.planR : parseInt(set.planR.split('–')[0])
+      r: typeof set.planR === 'number' ? set.planR : parseInt(String(set.planR).split('–')[0])
     };
   });
-  
-  saveState();
-  render();
-  showToast('Веса из плана заполнены');
 }
-
+function copyPlanForExercise(dayNum, exIdx) {
+  fillPlanFor(formatDate(state.currentDate), dayNum, exIdx, state.plan[dayNum][exIdx]);
+  saveState(); render(); showToast('Веса из плана заполнены');
+}
 function copyPlanWeights() {
-  const exercises = state.plan[state.currentDay];
   const dateKey = formatDate(state.currentDate);
-  
-  if (!state.history[dateKey]) {
-    state.history[dateKey] = { day: state.currentDay, exercises: {} };
-  }
-  
-  exercises.forEach((ex, exIdx) => {
-    const exKey = `${state.currentDay}_${exIdx}`;
-    if (!state.history[dateKey].exercises[exKey]) {
-      state.history[dateKey].exercises[exKey] = {};
-    }
-    ex.sets.forEach((set, setIdx) => {
-      const setKey = `${exIdx}_${setIdx}`;
-      state.history[dateKey].exercises[exKey][setKey] = {
-        w: set.planW === 'свой вес' ? '' : set.planW,
-        r: typeof set.planR === 'number' ? set.planR : parseInt(set.planR.split('–')[0])
-      };
-    });
-  });
-  
-  saveState();
-  render();
-  showToast('Все веса из плана заполнены');
+  state.plan[state.currentDay].forEach((ex, i) => fillPlanFor(dateKey, state.currentDay, i, ex));
+  saveState(); render(); showToast('Все веса из плана заполнены');
 }
 
 function showToast(msg) {
   const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.classList.add('show');
+  t.textContent = msg; t.classList.add('show');
   setTimeout(() => t.classList.remove('show'), 2000);
 }
 
-// ===== ЭКСПОРТ EXCEL =====
+// ===== ЭКСПОРТ EXCEL (формат как в исходном файле) =====
 function exportExcel() {
   const wb = XLSX.utils.book_new();
-  
-  // Листы День 1, 2, 3
   [1,2,3].forEach(dayNum => {
     const data = buildDaySheet(dayNum);
-    const ws = XLSX.utils.aoa_to_sheet(data);
-    XLSX.utils.book_append_sheet(wb, ws, `День ${dayNum}`);
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(data), `День ${dayNum}`);
   });
-  
-  // Журнал подходов
-  const journalData = buildJournalSheet();
-  const wsJournal = XLSX.utils.aoa_to_sheet(journalData);
-  XLSX.utils.book_append_sheet(wb, wsJournal, 'Журнал подходов');
-  
-  // Прогресс
-  const progressData = buildProgressSheet();
-  const wsProgress = XLSX.utils.aoa_to_sheet(progressData);
-  XLSX.utils.book_append_sheet(wb, wsProgress, 'Прогресс');
-  
-  // Недели
-  const weeksData = buildWeeksSheet();
-  const wsWeeks = XLSX.utils.aoa_to_sheet(weeksData);
-  XLSX.utils.book_append_sheet(wb, wsWeeks, 'Недели');
-  
-  // Сводка
-  const summaryData = buildSummarySheet();
-  const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
-  XLSX.utils.book_append_sheet(wb, wsSummary, 'Сводка');
-  
-  const dateStr = formatDate(state.currentDate).replace(/-/g,'.');
-  XLSX.writeFile(wb, `plan_trenirovok_${dateStr}.xlsx`);
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(buildJournalSheet()), 'Журнал подходов');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(buildProgressSheet()), 'Прогресс');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(buildWeeksSheet()), 'Недели');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(buildSummarySheet()), 'Сводка');
+  XLSX.writeFile(wb, `plan_trenirovok_${formatDate(state.currentDate)}.xlsx`);
   showToast('Excel скачан');
+}
+
+function dayDates(dayNum) {
+  return Object.keys(state.history).filter(d => state.history[d].day === dayNum).sort();
 }
 
 function buildDaySheet(dayNum) {
   const exercises = state.plan[dayNum];
+  const dates = dayDates(dayNum);
   const headers = ['Упражнение','Подход','Тип','Вес, план','Повторения, план'];
-  
-  // Добавить колонки для каждой даты в истории этого дня
-  const dates = Object.keys(state.history).filter(d => state.history[d].day === dayNum).sort();
-  dates.forEach(d => {
-    headers.push(`${formatDateShort(new Date(d))} вес`);
-    headers.push(`${formatDateShort(new Date(d))} повт.`);
-  });
-  headers.push('','Заметки');
-  
+  dates.forEach(d => { headers.push(`${formatDateShort(new Date(d))} вес`, `${formatDateShort(new Date(d))} повт.`); });
+  headers.push('', 'Заметки');
   const data = [headers];
-  
   exercises.forEach((ex, exIdx) => {
     const exKey = `${dayNum}_${exIdx}`;
     ex.sets.forEach((set, setIdx) => {
       const row = [ex.name, setIdx+1, set.type, set.planW, set.planR];
       dates.forEach(d => {
-        const saved = state.history[d]?.exercises?.[exKey]?.[`${exIdx}_${setIdx}`];
-        row.push(saved?.w ?? '', saved?.r ?? '');
+        const s = state.history[d]?.exercises?.[exKey]?.[`${exIdx}_${setIdx}`];
+        row.push(s?.w ?? '', s?.r ?? '');
       });
       row.push('', exIdx === 0 ? ex.note : '');
       data.push(row);
     });
   });
-  
   return data;
 }
 
 function buildJournalSheet() {
-  const headers = ['Дата','День','Упражнение','Подход','Тип','Вес, кг','Повторения','Объём, кг','План: вес','План: повторения'];
-  const data = [headers];
-  
-  const dates = Object.keys(state.history).sort();
-  dates.forEach(dateKey => {
-    const record = state.history[dateKey];
-    const dayNum = record.day;
-    const exercises = state.plan[dayNum];
-    
-    exercises.forEach((ex, exIdx) => {
-      const exKey = `${dayNum}_${exIdx}`;
+  const data = [['Дата','День','Упражнение','Подход','Тип','Вес, кг','Повторения','Объём, кг','План: вес','План: повторения']];
+  Object.keys(state.history).sort().forEach(dateKey => {
+    const rec = state.history[dateKey];
+    state.plan[rec.day].forEach((ex, exIdx) => {
       ex.sets.forEach((set, setIdx) => {
-        const setKey = `${exIdx}_${setIdx}`;
-        const saved = record.exercises?.[exKey]?.[setKey];
-        const w = saved?.w ?? '';
-        const r = saved?.r ?? '';
-        const volume = (w && r && set.type === 'рабочий') ? w * r : 0;
-        
-        data.push([
-          formatDateDisplay(new Date(dateKey)),
-          `День ${dayNum}`,
-          ex.name,
-          setIdx+1,
-          set.type,
-          w, r, volume,
-          set.planW, set.planR
-        ]);
+        const s = rec.exercises?.[`${rec.day}_${exIdx}`]?.[`${exIdx}_${setIdx}`];
+        if (!s) return;
+        const w = s.w, r = s.r;
+        const vol = (set.type==='рабочий' && w && r) ? w*r : 0;
+        data.push([formatDateDisplay(new Date(dateKey)), `День ${rec.day}`, ex.name, setIdx+1, set.type, w, r, vol, set.planW, set.planR]);
       });
     });
   });
-  
   return data;
 }
 
 function buildProgressSheet() {
-  const headers = ['Упражнение','Рабочих подходов','Макс. вес, кг','Объём, кг','Первое занятие','Вес первого, кг','Последнее занятие','Вес последнего, кг','Изменение, кг'];
-  const data = [headers];
-  
-  const allExercises = new Set();
-  [1,2,3].forEach(d => state.plan[d].forEach((ex,i) => allExercises.add(`${d}_${i}`)));
-  
-  allExercises.forEach(exKey => {
-    const [dayNum, exIdx] = exKey.split('_').map(Number);
-    const ex = state.plan[dayNum][exIdx];
-    const dates = Object.keys(state.history).filter(d => state.history[d].day === dayNum).sort();
-    
-    if (dates.length === 0) return;
-    
-    let maxWeight = 0, totalVolume = 0, workingSets = 0;
-    let firstDate = null, firstWeight = 0, lastDate = null, lastWeight = 0;
-    
-    dates.forEach(dateKey => {
-      const record = state.history[dateKey];
-      ex.sets.forEach((set, setIdx) => {
-        if (set.type !== 'рабочий') return;
-        const saved = record.exercises?.[exKey]?.[`${exIdx}_${setIdx}`];
-        if (!saved?.w) return;
-        workingSets++;
-        totalVolume += saved.w * (saved.r || 0);
-        if (saved.w > maxWeight) maxWeight = saved.w;
-        if (!firstDate) { firstDate = dateKey; firstWeight = saved.w; }
-        lastDate = dateKey;
-        lastWeight = saved.w;
+  const data = [['Упражнение','Рабочих подходов','Макс. вес, кг','Объём, кг','Первое занятие','Вес первого, кг','Последнее занятие','Вес последнего, кг','Изменение, кг']];
+  [1,2,3].forEach(dayNum => {
+    state.plan[dayNum].forEach((ex, exIdx) => {
+      const exKey = `${dayNum}_${exIdx}`;
+      const dates = dayDates(dayNum);
+      let maxW=0, vol=0, n=0, firstW=null, lastW=null, firstD=null, lastD=null;
+      dates.forEach(d => {
+        ex.sets.forEach((set, setIdx) => {
+          if (set.type!=='рабочий') return;
+          const s = state.history[d]?.exercises?.[exKey]?.[`${exIdx}_${setIdx}`];
+          if (!s || s.w === '' || s.w == null) return;
+          n++; vol += s.w*(s.r||0); if (s.w>maxW) maxW=s.w;
+          if (firstW===null){firstW=s.w;firstD=d;}
+          lastW=s.w; lastD=d;
+        });
       });
+      if (!n) return;
+      data.push([ex.name, n, maxW, vol, firstD?formatDateDisplay(new Date(firstD)):'', firstW, lastD?formatDateDisplay(new Date(lastD)):'', lastW, (lastW!=null&&firstW!=null)?+(lastW-firstW).toFixed(1):'']);
     });
-    
-    data.push([
-      ex.name, workingSets, maxWeight, totalVolume,
-      firstDate ? formatDateDisplay(new Date(firstDate)) : '',
-      firstWeight,
-      lastDate ? formatDateDisplay(new Date(lastDate)) : '',
-      lastWeight,
-      lastWeight - firstWeight
-    ]);
   });
-  
   return data;
 }
 
 function buildWeeksSheet() {
-  const headers = ['Неделя с (пн)','Вес ср., кг','Δ к пред. неделе','Дней с весом','Ккал ср.','Белок ср., г','Дней с едой','Вывод'];
-  const data = [headers];
-  // Заглушка — данные о весе и питании будут добавлены при загрузке Excel от пользователя
-  return data;
+  return [['Неделя с (пн)','Вес ср., кг','Δ к пред. неделе','Дней с весом','Ккал ср.','Белок ср., г','Дней с едой','Вывод'],
+    ['23.11.2026','','','','','','','ждёт данных']];
 }
 
 function buildSummarySheet() {
-  const data = [
+  return [
     ['План тренировок: 3 дня в неделю, цель — рост мышц'],
-    [''],
-    ['День','Фокус','Всего подходов','Рабочих подходов','Время, оценка','День недели'],
-    ['День 1','Низ: ноги', state.plan[1].reduce((s,e)=>s+e.sets.length,0), state.plan[1].reduce((s,e)=>s+e.sets.filter(x=>x.type==='рабочий').length,0), '73–78 мин','понедельник'],
-    ['День 2','Верх A: грудь, спина, плечи', state.plan[2].reduce((s,e)=>s+e.sets.length,0), state.plan[2].reduce((s,e)=>s+e.sets.filter(x=>x.type==='рабочий').length,0), '72–75 мин','среда'],
-    ['День 3','Верх B: плечи, руки', state.plan[3].reduce((s,e)=>s+e.sets.length,0), state.plan[3].reduce((s,e)=>s+e.sets.filter(x=>x.type==='рабочий').length,0), 'около 73 мин','пятница'],
-    [''],
-    ['График: понедельник — День 1 (ноги), среда — День 2 (верх A), пятница — День 3 (верх B).'],
-    [''],
-    ['Договорённости по плану'],
-    ['Без пресса, без упражнений на ягодицы, без канатов на трицепс.'],
-    ['Махи стоя не тяжелее 12 кг: растёт число повторений, а не вес.'],
-    ['Сгибание на бедро только сидя.'],
-    ['Новые упражнения: румынская тяга и разгибание из-за головы (вес подобрать).'],
-    [''],
+    [],
+    ['День','Фокус','Всего подходов','Рабочих подходов','День недели'],
+    ['День 1','Низ: ноги', state.plan[1].reduce((s,e)=>s+e.sets.length,0), state.plan[1].reduce((s,e)=>s+e.sets.filter(x=>x.type==='рабочий').length,0), 'понедельник'],
+    ['День 2','Верх A: грудь, спина, плечи', state.plan[2].reduce((s,e)=>s+e.sets.length,0), state.plan[2].reduce((s,e)=>s+e.sets.filter(x=>x.type==='рабочий').length,0), 'среда'],
+    ['День 3','Верх B: плечи, руки', state.plan[3].reduce((s,e)=>s+e.sets.length,0), state.plan[3].reduce((s,e)=>s+e.sets.filter(x=>x.type==='рабочий').length,0), 'пятница'],
+    [],
     ['Как заполнять и корректировать веса'],
-    ['Если во всех рабочих подходах упражнения набрана верхняя граница повторений — на следующей тренировке бери следующую ступень веса.'],
-    ['Если в первом рабочем подходе не набралась нижняя граница — снизь вес на одну ступень (5–10%).'],
-    ['Запас: в рабочих подходах оставляй 1–2 повторения до отказа; последний подход изоляции можно доводить до отказа.'],
-    ['Отдых: 2–3 минуты на базе, 60–90 секунд на изоляции.'],
-    ['Разгрузка: раз в 6–8 недель или при сильной усталости неделя с весами на 10–20% ниже.']
+    ['Если во всех рабочих подходах набрана верхняя граница повторений — следующая ступень веса.'],
+    ['Если в первом рабочем подходе не набралась нижняя граница — снизить вес на 5–10%.'],
+    ['Отдых: 2–3 мин на базе, 60–90 сек на изоляции. Разгрузка раз в 6–8 недель.']
   ];
-  return data;
 }
 
 // ===== ИМПОРТ EXCEL =====
 function importExcel(event) {
   const file = event.target.files[0];
   if (!file) return;
-  
   const reader = new FileReader();
   reader.onload = function(e) {
     try {
-      const data = new Uint8Array(e.target.result);
-      const wb = XLSX.read(data, {type:'array'});
-      
-      // Парсим листы День 1, 2, 3
+      const wb = XLSX.read(new Uint8Array(e.target.result), {type:'array'});
       [1,2,3].forEach(dayNum => {
-        const sheetName = `День ${dayNum}`;
-        if (!wb.Sheets[sheetName]) return;
-        const ws = wb.Sheets[sheetName];
+        const ws = wb.Sheets[`День ${dayNum}`];
+        if (!ws) return;
         const json = XLSX.utils.sheet_to_json(ws, {header:1});
-        
         if (json.length < 2) return;
-        
         const headers = json[0];
-        // Найти колонки с датами (формат "DD.MM вес" / "DD.MM повт.")
         const dateCols = {};
         headers.forEach((h, idx) => {
-          if (typeof h === 'string' && h.match(/^\d{2}\.\d{2}/)) {
-            const dateStr = h.split(' ')[0];
+          if (typeof h === 'string' && /^\d{2}\.\d{2}/.test(h)) {
+            const ds = h.split(' ')[0];
             const field = h.includes('повт') ? 'r' : 'w';
-            if (!dateCols[dateStr]) dateCols[dateStr] = {};
-            dateCols[dateStr][field] = idx;
+            if (!dateCols[ds]) dateCols[ds] = {};
+            dateCols[ds][field] = idx;
           }
         });
-        
-        // Парсим упражнения
-        let currentExIdx = -1;
         json.slice(1).forEach(row => {
           if (!row[0]) return;
-          const exName = row[0];
-          const setNum = row[1];
-          const setType = row[2];
-          const planW = row[3];
-          const planR = row[4];
-          
-          // Найти упражнение в плане
-          const exIdx = state.plan[dayNum].findIndex(e => e.name === exName);
+          const exIdx = state.plan[dayNum].findIndex(x => x.name === row[0]);
           if (exIdx === -1) return;
-          currentExIdx = exIdx;
-          const setIdx = (typeof setNum === 'number' ? setNum : parseInt(setNum)) - 1;
-          if (setIdx < 0 || setIdx >= state.plan[dayNum][exIdx].sets.length) return;
-          
-          // Обновить план если есть новые веса (колонки после дат)
-          // Формат: после колонок с датами идут пустые колонки, потом Заметки
-          // Ищем колонку "След. вес" — но в упрощённом формате берём последние числовые значения
-          
-          // Сохранить историю по датам
-          Object.keys(dateCols).forEach(dateStr => {
-            const wIdx = dateCols[dateStr].w;
-            const rIdx = dateCols[dateStr].r;
-            const w = row[wIdx];
-            const r = row[rIdx];
-            if (w !== undefined && w !== '') {
-              const fullDate = `${dateStr}.${new Date().getFullYear()}`;
-              const dateKey = formatDate(parseDateShort(dateStr));
-              const exKey = `${dayNum}_${exIdx}`;
-              const setKey = `${exIdx}_${setIdx}`;
-              if (!state.history[dateKey]) state.history[dateKey] = {day: dayNum, exercises: {}};
-              if (!state.history[dateKey].exercises[exKey]) state.history[dateKey].exercises[exKey] = {};
-              state.history[dateKey].exercises[exKey][setKey] = {
-                w: typeof w === 'number' ? w : parseFloat(w),
-                r: typeof r === 'number' ? r : parseInt(r)
-              };
-            }
+          const setIdx = (parseInt(row[1])||1) - 1;
+          if (row[3] !== undefined && row[3] !== '') state.plan[dayNum][exIdx].sets[setIdx].planW = row[3];
+          if (row[4] !== undefined && row[4] !== '') state.plan[dayNum][exIdx].sets[setIdx].planR = row[4];
+          Object.keys(dateCols).forEach(ds => {
+            const w = row[dateCols[ds].w], r = row[dateCols[ds].r];
+            if (w === undefined || w === '') return;
+            const [dd, mm] = ds.split('.').map(Number);
+            const dt = new Date(new Date().getFullYear(), mm-1, dd);
+            const dateKey = formatDate(dt);
+            if (!state.history[dateKey]) state.history[dateKey] = { day: dayNum, exercises: {} };
+            const exKey = `${dayNum}_${exIdx}`;
+            if (!state.history[dateKey].exercises[exKey]) state.history[dateKey].exercises[exKey] = {};
+            state.history[dateKey].exercises[exKey][`${exIdx}_${setIdx}`] = { w: parseFloat(w), r: parseInt(r) };
           });
-          
-          // Обновить план (берём значения из колонок после дат — это "След. вес/повт")
-          // В упрощённом формате: если есть значения после последних дат
-          const lastDateCol = Math.max(...Object.values(dateCols).map(c => Math.max(c.w, c.r)));
-          const nextWIdx = lastDateCol + 2; // пропуск пустой колонки
-          const nextRIdx = nextWIdx + 1;
-          if (row[nextWIdx] !== undefined && row[nextWIdx] !== '') {
-            state.plan[dayNum][exIdx].sets[setIdx].planW = row[nextWIdx];
-          }
-          if (row[nextRIdx] !== undefined && row[nextRIdx] !== '') {
-            state.plan[dayNum][exIdx].sets[setIdx].planR = row[nextRIdx];
-          }
         });
       });
-      
       state.planDate = formatDate(new Date());
-      saveState();
-      render();
+      saveState(); render();
       showToast('Excel загружен, план обновлён');
-    } catch(err) {
-      console.error(err);
-      showToast('Ошибка загрузки: ' + err.message);
-    }
+    } catch(err) { showToast('Ошибка: ' + err.message); }
   };
   reader.readAsArrayBuffer(file);
   event.target.value = '';
 }
 
-function parseDateShort(str) {
-  const [dd, mm] = str.split('.').map(Number);
-  const d = new Date();
-  d.setDate(dd);
-  d.setMonth(mm - 1);
-  return d;
-}
-
-// Запуск
 init();
 </script>
 </body>
