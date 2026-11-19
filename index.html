@@ -22,21 +22,25 @@ body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text',sans-serif;backg
 .btn-green{background:#b8e986;color:#0a0a0a}
 .btn-green:active{background:#a0d470}
 .calendar-bar{display:flex;align-items:center;gap:12px;padding:12px 16px}
-.calendar-bar .nav-btn{width:36px;height:36px;border-radius:50%;background:#1a1a1a;border:none;color:#e5e5e5;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.calendar-bar .nav-btn{width:40px;height:40px;border-radius:50%;background:#1a1a1a;border:none;color:#e5e5e5;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center}
 .calendar-bar .nav-btn:active{background:#333}
 .calendar-bar .date-display{flex:1;text-align:center}
 .calendar-bar .date-display .date{font-size:20px;font-weight:600}
 .calendar-bar .date-display .weekday{font-size:13px;color:#888;margin-top:2px}
 .day-tabs{display:flex;gap:8px;padding:0 16px 12px;overflow-x:auto;-webkit-overflow-scrolling:touch}
 .day-tabs::-webkit-scrollbar{display:none}
-.day-tab{padding:8px 16px;border-radius:20px;background:#1a1a1a;border:none;color:#888;font-size:13px;font-weight:500;white-space:nowrap;cursor:pointer;transition:all .15s}
+.day-tab{padding:8px 14px;border-radius:20px;background:#1a1a1a;border:none;color:#888;font-size:13px;font-weight:500;white-space:nowrap;cursor:pointer;transition:all .15s}
 .day-tab.active{background:#e5e5e5;color:#0a0a0a}
+.day-tab .day-name{color:#b8e986;font-weight:600}
+.day-tab.active .day-name{color:#0a0a0a}
 .workout-area{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:0 16px 100px}
 .exercise-card{background:#141414;border-radius:16px;margin-bottom:12px;overflow:hidden}
 .exercise-header{padding:14px 16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #222}
 .exercise-header h3{font-size:16px;font-weight:600}
 .exercise-header .meta{font-size:12px;color:#888}
-.exercise-note{padding:0 16px 8px;font-size:12px;color:#666;font-style:italic}
+.exercise-prev{padding:8px 16px 10px;font-size:12px;color:#888;border-bottom:1px solid #1a1a1a;background:#0f0f0f}
+.exercise-prev b{color:#b8e986;font-weight:600}
+.exercise-note{padding:6px 16px 8px;font-size:12px;color:#666;font-style:italic}
 .sets-header{display:grid;grid-template-columns:40px 1fr 80px 80px;padding:8px 16px;font-size:11px;color:#666;text-transform:uppercase;letter-spacing:.5px}
 .sets-header>:nth-child(3),.sets-header>:nth-child(4){text-align:center}
 .set-row{display:grid;grid-template-columns:40px 1fr 80px 80px;padding:10px 16px;align-items:center;border-top:1px solid #1a1a1a}
@@ -94,7 +98,9 @@ input[type=file]{display:none}
 
 <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 <script>
-// ===== ПЛАН =====
+const DAY_NAMES = {1:'Ноги', 2:'Верх A', 3:'Верх B'};
+const DAY_FULL = {1:'Низ: ноги', 2:'Верх A: грудь, спина, плечи', 3:'Верх B: плечи, руки'};
+
 const EXERCISES = {
   1: [
     {name:'Приседание со штангой',sets:[
@@ -200,7 +206,6 @@ const EXERCISES = {
   ]
 };
 
-// ===== ИСТОРИЯ ИЗ EXCEL =====
 const SEED_HISTORY = {
   '2026-11-04': { day:2, ex:[
     [[20,12],[65,8],[85,5],[85,10],[90,9],[95,7]],
@@ -276,7 +281,6 @@ const SEED_HISTORY = {
   ]}
 };
 
-// ===== ПРОЧИЕ ДАННЫЕ ИЗ EXCEL (для выгрузки «точ-в-точ») =====
 const SEED_WEEKS = [
   ['02.11.2026',99.95,'',2,'мало данных по весу'],
   ['09.11.2026',99.77,-0.18,3,'ниже цели: добавь ~150–200 ккал'],
@@ -315,6 +319,8 @@ const SEED_INBODY = [
 ];
 
 const WEEKDAYS = ['воскресенье','понедельник','вторник','среда','четверг','пятница','суббота'];
+const TRAINING_DOW = [1,3,5]; // Пн, Ср, Пт
+const DOW_TO_DAY = {1:1, 3:2, 5:3};
 
 let state = {
   currentDate: new Date(),
@@ -324,14 +330,12 @@ let state = {
   plan: JSON.parse(JSON.stringify(EXERCISES))
 };
 
-// ===== ИНИЦИАЛИЗАЦИЯ =====
 function init() {
   loadState();
   applySeedHistory();
   findCurrentDay();
   render();
 }
-
 function loadState() {
   try {
     const saved = localStorage.getItem('gymState2');
@@ -368,21 +372,34 @@ function formatDate(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padSt
 function formatDateDisplay(d){return `${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')}.${d.getFullYear()}`;}
 function formatDateShort(d){return `${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')}`;}
 
+// Умный календарь: ищет ближайший тренировочный день в нужном направлении
 function findCurrentDay() {
   const d = new Date(state.currentDate);
   const dow = d.getDay();
-  const map = {1:1, 3:2, 5:3};
-  if (map[dow]) { state.currentDay = map[dow]; return; }
-  const skip = {0:[1,1], 2:[1,2], 4:[1,3], 6:[2,1]};
-  const s = skip[dow];
-  d.setDate(d.getDate() + s[0]);
+  if (DOW_TO_DAY[dow]) { state.currentDay = DOW_TO_DAY[dow]; return; }
+  // Нетренировочный день → прыгаем на ближайший вперёд
+  const next = {0:1, 2:1, 4:1, 6:2}; // сколько дней вперёд до следующего тренировочного
+  d.setDate(d.getDate() + next[dow]);
   state.currentDate = d;
-  state.currentDay = s[1];
+  state.currentDay = DOW_TO_DAY[d.getDay()];
 }
-function navigateDay(dir){const d=new Date(state.currentDate);d.setDate(d.getDate()+dir);state.currentDate=d;findCurrentDay();render();}
-function selectDay(n){state.currentDay=n;render();}
 
-// ===== ПЛАН: ожидаемые значения и toggle =====
+function navigateDay(dir) {
+  // Ищем ближайший тренировочный день в направлении dir
+  const d = new Date(state.currentDate);
+  let attempts = 0;
+  while (attempts < 14) {
+    d.setDate(d.getDate() + dir);
+    if (TRAINING_DOW.includes(d.getDay())) break;
+    attempts++;
+  }
+  state.currentDate = d;
+  state.currentDay = DOW_TO_DAY[d.getDay()];
+  render();
+}
+
+function selectDay(n) { state.currentDay = n; render(); }
+
 function expectedPlan(set){
   return {
     w: set.planW === 'свой вес' ? '' : set.planW,
@@ -404,9 +421,7 @@ function isExercisePlanFilled(dayNum, exIdx){
     return wOk && rOk;
   });
 }
-function isDayPlanFilled(dayNum){
-  return state.plan[dayNum].every((_, i) => isExercisePlanFilled(dayNum, i));
-}
+function isDayPlanFilled(dayNum){ return state.plan[dayNum].every((_, i) => isExercisePlanFilled(dayNum, i)); }
 function fillExercisePlan(dateKey, dayNum, exIdx){
   const ex = state.plan[dayNum][exIdx];
   if (!state.history[dateKey]) state.history[dateKey] = { day: dayNum, exercises: {} };
@@ -422,9 +437,7 @@ function clearExercisePlan(dateKey, dayNum, exIdx){
   if (!state.history[dateKey] || !state.history[dateKey].exercises) return;
   const exKey = `${dayNum}_${exIdx}`;
   if (!state.history[dateKey].exercises[exKey]) return;
-  ex.sets.forEach((_, setIdx) => {
-    state.history[dateKey].exercises[exKey][`${exIdx}_${setIdx}`] = { w: '', r: '' };
-  });
+  ex.sets.forEach((_, setIdx) => { state.history[dateKey].exercises[exKey][`${exIdx}_${setIdx}`] = { w: '', r: '' }; });
 }
 function toggleExercisePlan(dayNum, exIdx){
   const dateKey = formatDate(state.currentDate);
@@ -444,7 +457,6 @@ function toggleDayPlan(){
   saveState(); render();
 }
 
-// ===== РЕНДЕР =====
 function render(){renderHeader();renderCalendar();renderDayTabs();renderWorkout();saveState();}
 function renderHeader(){
   const d=new Date(state.planDate);
@@ -464,33 +476,48 @@ function renderDayTabs(){
   Object.keys(state.history).sort().reverse().forEach(ds=>{const day=state.history[ds].day;if(!lastDates[day])lastDates[day]=ds;});
   document.getElementById('dayTabs').innerHTML=[1,2,3].map(n=>{
     const lbl=lastDates[n]?` посл. ${formatDateShort(new Date(lastDates[n]))}`:'';
-    return `<button class="day-tab ${n===state.currentDay?'active':''}" onclick="selectDay(${n})">День ${n}${lbl}</button>`;
+    return `<button class="day-tab ${n===state.currentDay?'active':''}" onclick="selectDay(${n})">День ${n} · <span class="day-name">${DAY_NAMES[n]}</span>${lbl}</button>`;
   }).join('');
 }
+
+// Сводка предыдущей тренировки этого дня по упражнению
+function prevWorkoutSummary(dayNum, exIdx, currentDate) {
+  const prevDate = findPreviousWorkoutDate(dayNum, currentDate);
+  if (!prevDate) return null;
+  const ex = state.plan[dayNum][exIdx];
+  const working = ex.sets.filter(s => s.type === 'рабочий').map((set, setIdx) => {
+    const s = state.history[prevDate]?.exercises?.[`${dayNum}_${exIdx}`]?.[`${exIdx}_${setIdx}`];
+    return s ? `${s.w}×${s.r}` : '—';
+  });
+  return { date: prevDate, text: working.join(', ') };
+}
+
 function renderWorkout(){
   const exercises=state.plan[state.currentDay];
   const dateKey=formatDate(state.currentDate);
   const saved=state.history[dateKey];
-  const prevDate=findPreviousWorkoutDate(state.currentDay,dateKey);
-  let html=`<div style="padding:12px 0 8px;font-size:14px;color:#888"><b style="color:#e5e5e5">${formatDateShort(state.currentDate)} · День ${state.currentDay}</b> — впишите вес и повторы в поля справа от каждого подхода</div>`;
+  let html=`<div style="padding:12px 0 8px;font-size:14px;color:#888">
+    <b style="color:#e5e5e5">${formatDateShort(state.currentDate)} · День ${state.currentDay} · ${DAY_NAMES[state.currentDay]}</b> — впишите вес и повторы в поля справа от каждого подхода
+  </div>`;
   exercises.forEach((ex,exIdx)=>{
     const working=ex.sets.filter(s=>s.type==='рабочий').length;
     const exKey=`${state.currentDay}_${exIdx}`;
     const savedEx=saved?.exercises?.[exKey];
     const filled=isExercisePlanFilled(state.currentDay,exIdx);
-    html+=`<div class="exercise-card"><div class="exercise-header"><h3>${ex.name}</h3><div class="meta">${ex.sets.length} подх. · ${working} раб.</div></div>`;
+    const prev = prevWorkoutSummary(state.currentDay, exIdx, dateKey);
+    html+=`<div class="exercise-card">
+      <div class="exercise-header"><h3>${ex.name}</h3><div class="meta">${ex.sets.length} подх. · ${working} раб.</div></div>`;
+    if (prev) html+=`<div class="exercise-prev"><b>${formatDateShort(new Date(prev.date))}:</b> ${prev.text}</div>`;
+    else html+=`<div class="exercise-prev" style="color:#555">Нет предыдущих тренировок этого дня</div>`;
     if(ex.note)html+=`<div class="exercise-note">${ex.note}</div>`;
     html+=`<div class="sets-header"><div></div><div></div><div>вес, кг</div><div>повт.</div></div>`;
     ex.sets.forEach((set,setIdx)=>{
       const setKey=`${exIdx}_${setIdx}`;
       const savedSet=savedEx?.[setKey];
-      const prevSet=prevDate?getPreviousSet(prevDate,state.currentDay,exIdx,setIdx):null;
-      const prevDisplay=prevSet?`${formatDateShort(new Date(prevDate))}: ${prevSet.w} × ${prevSet.r}`:'';
       const actW=(savedSet?.w??'')===0?0:(savedSet?.w??'');
       const actR=savedSet?.r??'';
       html+=`<div class="set-row"><div class="set-num">${setIdx+1}</div>
-        <div class="set-plan"><div>план <b>${set.planW}</b> × <b>${set.planR}</b> <span class="plan-type">${set.type}</span></div>
-        ${prevDisplay?`<div class="plan-prev">${prevDisplay}</div>`:''}</div>
+        <div class="set-plan"><div>план <b>${set.planW}</b> × <b>${set.planR}</b> <span class="plan-type">${set.type}</span></div></div>
         <div class="set-input"><label>кг</label><input type="number" step="0.5" placeholder="—" value="${actW}"
           onchange="saveSet('${dateKey}','${exKey}','${setKey}','w',this.value)" oninput="saveSet('${dateKey}','${exKey}','${setKey}','w',this.value)"></div>
         <div class="set-input"><label>повт</label><input type="number" placeholder="—" value="${actR}"
@@ -501,8 +528,10 @@ function renderWorkout(){
   });
   document.getElementById('workoutArea').innerHTML=html;
 }
-function findPreviousWorkoutDate(day,currentDate){return Object.keys(state.history).filter(d=>state.history[d].day===day&&d<currentDate).sort().reverse()[0]||null;}
-function getPreviousSet(prevDate,day,exIdx,setIdx){return state.history[prevDate]?.exercises?.[`${day}_${exIdx}`]?.[`${exIdx}_${setIdx}`]||null;}
+
+function findPreviousWorkoutDate(day,currentDate){
+  return Object.keys(state.history).filter(d=>state.history[d].day===day && d<currentDate).sort().reverse()[0]||null;
+}
 
 function saveSet(dateKey,exKey,setKey,field,value){
   if(!state.history[dateKey])state.history[dateKey]={day:state.currentDay,exercises:{}};
@@ -514,29 +543,18 @@ function saveSet(dateKey,exKey,setKey,field,value){
 }
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2000);}
 
-// ===== СТИЛИ EXCEL =====
-const F={
-  thin:{style:'thin',color:{rgb:'B0B0B0'}},
-  med:{style:'medium',color:{rgb:'707070'}},
-  borderAll:{top:F.thin,bottom:F.thin,left:F.thin,right:F.thin},
-  borderMed:{top:F.med,bottom:F.med,left:F.med,right:F.med}
-};
+// ===== EXCEL =====
+const F={thin:{style:'thin',color:{rgb:'B0B0B0'}},med:{style:'medium',color:{rgb:'707070'}},borderAll:{top:{style:'thin',color:{rgb:'B0B0B0'}},bottom:{style:'thin',color:{rgb:'B0B0B0'}},left:{style:'thin',color:{rgb:'B0B0B0'}},right:{style:'thin',color:{rgb:'B0B0B0'}}},borderMed:{top:{style:'medium',color:{rgb:'707070'}},bottom:{style:'medium',color:{rgb:'707070'}},left:{style:'medium',color:{rgb:'707070'}},right:{style:'medium',color:{rgb:'707070'}}}};
 function S(extra){return Object.assign({border:F.borderAll,font:{sz:11,name:'Calibri'},alignment:{vertical:'center'}},extra);}
 function styleCell(ws,r,c,style){const addr=XLSX.utils.encode_cell({r,c});if(!ws[addr])ws[addr]={t:'s',v:''};ws[addr].s=style;}
 function styleRow(ws,r,cols,style){for(let c=0;c<cols;c++)styleCell(ws,r,c,style);}
-function styleCol(ws,c,rows,style){for(let r=0;r<rows;r++)styleCell(ws,r,c,style);}
 function titleStyle(){return S({font:{bold:true,sz:14,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:'3F3F3F'}},alignment:{horizontal:'left',vertical:'center'},border:F.borderMed});}
 function headerStyle(){return S({font:{bold:true,color:{rgb:'202020'}},fill:{fgColor:{rgb:'D9D9D9'}},alignment:{horizontal:'center',wrapText:true},border:F.borderMed});}
 function yellowStyle(){return S({fill:{fgColor:{rgb:'FFF2CC'}}});}
 function noteStyle(){return S({font:{italic:true,color:{rgb:'808080'},sz:10},alignment:{wrapText:true}});}
 function boldStyle(){return S({font:{bold:true}});}
+function finalizeSheet(ws,ref,cols){ws['!ref']=ref;ws['!cols']=cols;}
 
-function finalizeSheet(ws,ref,cols){
-  ws['!ref']=ref;
-  ws['!cols']=cols;
-}
-
-// ===== ЭКСПОРТ =====
 function exportExcel(){
   const wb=XLSX.utils.book_new();
   [1,2,3].forEach(d=>XLSX.utils.book_append_sheet(wb,buildDaySheet(d),`День ${d}`));
@@ -550,7 +568,6 @@ function exportExcel(){
   XLSX.writeFile(wb,`plan_trenirovok_${formatDate(state.currentDate)}.xlsx`);
   showToast('Excel скачан');
 }
-
 function dayDates(dayNum){return Object.keys(state.history).filter(d=>state.history[d].day===dayNum).sort();}
 
 function buildDaySheet(dayNum){
@@ -559,27 +576,22 @@ function buildDaySheet(dayNum){
   const headers=['Упражнение','Подход','Тип','Вес, план','Повторения, план'];
   dates.forEach(d=>headers.push(`${formatDateShort(new Date(d))} вес`,`${formatDateShort(new Date(d))} повт.`));
   headers.push('След. вес','След. повт.','','Заметки');
-  const rows=[[`День ${dayNum}`],['Жёлтые ячейки — ввод после каждого подхода. «След.» — вес на следующую тренировку.'],headers];
+  const rows=[[`День ${dayNum} · ${DAY_NAMES[dayNum]}`],[`Жёлтые ячейки — ввод после каждого подхода. «След.» — вес на следующую тренировку.`],headers];
   ex.forEach((e,exIdx)=>{
     e.sets.forEach((set,setIdx)=>{
       const row=[e.name,setIdx+1,set.type,set.planW,set.planR];
       dates.forEach(d=>{const s=state.history[d]?.exercises?.[`${dayNum}_${exIdx}`]?.[`${exIdx}_${setIdx}`];row.push(s?.w??'',s?.r??'');});
-      const exp=expectedPlan(set);
       row.push(set.planW,set.planR,'',exIdx===0?e.note:'');
       rows.push(row);
     });
   });
   const ws=XLSX.utils.aoa_to_sheet(rows);
   const cols=headers.length;
-  // заголовок листа
   ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:cols-1}},{s:{r:1,c:0},e:{r:1,c:cols-1}}];
-  styleRow(ws,0,cols,titleStyle());
-  styleRow(ws,1,cols,noteStyle());
-  styleRow(ws,2,cols,headerStyle());
+  styleRow(ws,0,cols,titleStyle());styleRow(ws,1,cols,noteStyle());styleRow(ws,2,cols,headerStyle());
   const yellowCols=[];
   dates.forEach((_,i)=>{yellowCols.push(5+i*2,6+i*2);});
-  yellowCols.push(cols-4,cols-3); // След. вес/повт
-  yellowCols.forEach(c=>{for(let r=3;r<rows.length;r++)styleCell(ws,r,c,yellowStyle());});
+  yellowCols.push(cols-4,cols-3);
   for(let r=3;r<rows.length;r++){
     styleRow(ws,r,cols,S({}));
     yellowCols.forEach(c=>styleCell(ws,r,c,yellowStyle()));
@@ -603,7 +615,7 @@ function buildJournalSheet(){
         const s=rec.exercises?.[`${rec.day}_${exIdx}`]?.[`${exIdx}_${setIdx}`];
         if(!s||(s.w===''||s.w==null)&&(s.r===''||s.r==null))return;
         const vol=(set.type==='рабочий'&&s.w&&s.r)?+(s.w*s.r).toFixed(1):0;
-        rows.push([formatDateDisplay(new Date(dateKey)),`День ${rec.day}`,e.name,setIdx+1,set.type,s.w,s.r,vol,set.planW,set.planR]);
+        rows.push([formatDateDisplay(new Date(dateKey)),`День ${rec.day} · ${DAY_NAMES[rec.day]}`,e.name,setIdx+1,set.type,s.w,s.r,vol,set.planW,set.planR]);
       });
     });
   });
@@ -612,7 +624,7 @@ function buildJournalSheet(){
   styleRow(ws,0,10,titleStyle());styleRow(ws,1,10,noteStyle());styleRow(ws,2,10,headerStyle());
   for(let r=3;r<rows.length;r++){styleRow(ws,r,10,S({}));if(rows[r][4]==='рабочий')styleCell(ws,r,4,boldStyle());}
   finalizeSheet(ws,XLSX.utils.encode_range({s:{r:0,c:0},e:{r:rows.length-1,c:9}}),
-    [{wch:12},{wch:8},{wch:30},{wch:7},{wch:9},{wch:9},{wch:10},{wch:11},{wch:10},{wch:12}]);
+    [{wch:12},{wch:14},{wch:30},{wch:7},{wch:9},{wch:9},{wch:10},{wch:11},{wch:10},{wch:12}]);
   return ws;
 }
 
@@ -649,7 +661,6 @@ function buildWeeksSheet(){
     ['Неделя с (пн)','Вес ср., кг','Δ к пред. неделе','Дней с весом','Вывод','','','Дата','Вес утром, кг','','Пороги, кг/нед',''],
     ...SEED_WEEKS.map(w=>[w[0],w[1],w[2],w[3],w[4],'','','','','','','']),
     [],[],['','Мин.',0.15],['','Макс.',0.35]];
-  // вшиваем веса по датам в колонки H/I
   const startW=3;
   SEED_WEIGHTS.forEach((wd,i)=>{rows[startW+i][7]=wd[0];rows[startW+i][8]=wd[1];});
   const ws=XLSX.utils.aoa_to_sheet(rows);
@@ -676,7 +687,7 @@ function buildFeelSheet(){
     styleCell(ws,r,6,noteStyle());
   }
   finalizeSheet(ws,XLSX.utils.encode_range({s:{r:0,c:0},e:{r:rows.length-1,c:6}}),
-    [{wch:12},{wch:8},{wch:6},{wch:10},{wch:13},{wch:16},{wch:60}]);
+    [{wch:12},{wch:14},{wch:6},{wch:10},{wch:13},{wch:16},{wch:60}]);
   return ws;
 }
 
@@ -713,9 +724,9 @@ function buildSummarySheet(){
   const rows=[
     ['План тренировок: 3 дня в неделю, цель — рост мышц'],[],
     ['День','Фокус','Всего подходов','Рабочих подходов','День недели'],
-    ['День 1','Низ: ноги',29,19,'понедельник'],
-    ['День 2','Верх A: грудь, спина, плечи',28,22,'среда'],
-    ['День 3','Верх B: плечи, руки',32,23,'пятница'],
+    ['День 1 · '+DAY_NAMES[1],DAY_FULL[1],state.plan[1].reduce((s,e)=>s+e.sets.length,0),state.plan[1].reduce((s,e)=>s+e.sets.filter(x=>x.type==='рабочий').length,0),'понедельник'],
+    ['День 2 · '+DAY_NAMES[2],DAY_FULL[2],state.plan[2].reduce((s,e)=>s+e.sets.length,0),state.plan[2].reduce((s,e)=>s+e.sets.filter(x=>x.type==='рабочий').length,0),'среда'],
+    ['День 3 · '+DAY_NAMES[3],DAY_FULL[3],state.plan[3].reduce((s,e)=>s+e.sets.length,0),state.plan[3].reduce((s,e)=>s+e.sets.filter(x=>x.type==='рабочий').length,0),'пятница'],
     ['Итого за неделю','',89,64,''],[],
     ['График: понедельник — День 1 (ноги), среда — День 2 (верх A), пятница — День 3 (верх B).'],[],
     ['Договорённости по плану'],
@@ -736,11 +747,10 @@ function buildSummarySheet(){
   styleRow(ws,2,5,headerStyle());
   for(let r=3;r<=6;r++)styleRow(ws,r,5,S({}));
   [10,16].forEach(r=>{styleRow(ws,r,5,boldStyle());});
-  finalizeSheet(ws,XLSX.utils.encode_range({s:{r:0,c:0},e:{r:rows.length-1,c:4}}),[{wch:12},{wch:34},{wch:14},{wch:16},{wch:12}]);
+  finalizeSheet(ws,XLSX.utils.encode_range({s:{r:0,c:0},e:{r:rows.length-1,c:4}}),[{wch:18},{wch:34},{wch:14},{wch:16},{wch:12}]);
   return ws;
 }
 
-// ===== ИМПОРТ =====
 function importExcel(event){
   const file=event.target.files[0];if(!file)return;
   const reader=new FileReader();
