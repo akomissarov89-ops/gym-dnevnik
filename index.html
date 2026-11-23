@@ -1,11 +1,12 @@
 <!DOCTYPE html>
 <!--═══════════════════════════════════════════════════════════════════════════════
- ДНЕВНИК ТРЕНИРОВОК · PWA · v15
- Полная сборка: дневник (как v13) + таймер отдыха крупно по центру + громкий сигнал.
+ ДНЕВНИК ТРЕНИРОВОК · PWA · v16 — полный файл index.html
  • localStorage['gymDiary.v11'] — данные устройства подхватываются как есть
- • Таймер: абсолютное время (фон не сбивает), аудио-сессия + MediaSession →
-   «Сейчас играет» на локскрине и в Dynamic Island
- • Сигнал: осциллятор ×3 → усиление → компрессор → выход, серии, вибро, вспышка
+ • Таймер отдыха: крупные цифры по центру, абсолютное время (фон не сбивает),
+   аудио-сессия + MediaSession → «Сейчас играет» на локскрине и в Dynamic Island
+ • Конец отдыха = мягкая мелодия (колокольчик / маримба / калимба / арфа /
+   music box / чайм) с реверберацией; панель «♪» — мелодия и плотность экрана
+ • Пустота под шапкой закрыта: отступ считается по нижней кромке шапки
  • Excel: 11 листов со стилями, импорт включая InBody и Сводку
 ═══════════════════════════════════════════════════════════════════════════════-->
 <html lang="ru">
@@ -34,7 +35,7 @@
 --yellow:#ddc65e;--sand:#c9bb9c;
 --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,monospace;
 --sans:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",system-ui,sans-serif;
---hdr:150px;--dock:80px}
+--hdr:150px;--dock:80px;--fixTop:158px;--fixBot:98px;--dCard:9px;--dSec:10px;--dRad:15px;--dSide:12px}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;height:100%;background:var(--bg)}
 body{color:var(--txt);font-family:var(--sans);font-size:15px;line-height:1.35;overscroll-behavior-y:none;-webkit-font-smoothing:antialiased}
@@ -51,7 +52,7 @@ body::after{content:"";position:fixed;inset:0;z-index:1;pointer-events:none;opac
 ::-webkit-scrollbar-thumb:hover{background:var(--limeD)}
 *{scrollbar-width:thin;scrollbar-color:#333f2c #0d1013}
 .hdr{position:fixed;top:0;left:0;right:0;z-index:40;background:linear-gradient(180deg,rgba(8,9,11,.99),rgba(8,9,11,.93));backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-bottom:1px solid var(--line);padding-top:env(safe-area-inset-top)}
-.hdr-main{display:flex;align-items:center;gap:7px;padding:9px 12px 7px}
+.hdr-main{display:flex;align-items:center;gap:6px;padding:9px 12px 7px}
 .mark{width:31px;height:31px;flex:none;border-radius:10px;display:grid;place-items:center;background:linear-gradient(140deg,var(--lime),#8fc63c 58%,var(--cyan));box-shadow:0 4px 14px -7px rgba(178,213,86,.8)}
 .mark svg{width:18px;height:18px;stroke:#08090b;fill:none;stroke-width:2.2;stroke-linecap:round}
 .hdate{flex:1;min-width:0}
@@ -67,6 +68,7 @@ body::after{content:"";position:fixed;inset:0;z-index:1;pointer-events:none;opac
 .ib.on{color:var(--lime2);border-color:var(--limeB);background:var(--limeT)}
 .ib.off{color:var(--txt4)}
 .ib.acc{width:36px;background:var(--limeT);border-color:var(--limeB);color:var(--lime2);font-size:10.5px}
+.ib.mel{background:rgba(200,242,78,.1);border-color:rgba(200,242,78,.4);color:var(--lime2);font-size:13px}
 .ib .chev{transition:transform .25s;font-size:11px}
 body.cal-collapsed .ib .chev{transform:rotate(180deg)}
 .cal-wrap{padding:0 0 6px}
@@ -107,7 +109,7 @@ body.cal-collapsed .cal-wrap{display:none}
 .chip.on.c2{background:linear-gradient(140deg,var(--cyan),#3e9bd6)}
 .chip.on.c3{background:linear-gradient(140deg,var(--violet),#7a63c4)}
 .chip.on.c0{background:linear-gradient(140deg,#9a8cf5,#6d5bc4)}
-.scroll{position:relative;z-index:2;padding:calc(var(--hdr) + env(safe-area-inset-top) + 8px) 12px calc(var(--dock) + env(safe-area-inset-bottom) + 18px);max-width:720px;margin:0 auto;min-height:100vh}
+.scroll{position:relative;z-index:2;padding:var(--fixTop) var(--dSide) var(--fixBot);max-width:720px;margin:0 auto;min-height:100vh}
 .sess-line{display:flex;align-items:center;gap:7px;margin-bottom:10px}
 .sess-line .t{font-size:14px;font-weight:750;letter-spacing:-.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .sess-line .s{font-size:10.5px;color:var(--txt3);font-family:var(--mono);flex:none}
@@ -119,7 +121,7 @@ body.cal-collapsed .cal-wrap{display:none}
 .notice{display:flex;align-items:center;gap:9px;background:var(--amberT);border:1px solid var(--amberB);border-radius:12px;padding:9px 11px;margin-bottom:10px;font-size:11px;color:var(--txt2);line-height:1.4}
 .notice b{display:block;color:var(--amber);font-size:11.5px}
 .notice .act{flex:none;padding:6px 9px;border-radius:8px;background:var(--limeT);border:1px solid var(--limeB);color:var(--lime2);font-size:10.5px;font-weight:700;cursor:pointer}
-.card{background:linear-gradient(168deg,var(--surf2),var(--surf));border:1px solid var(--line);border-radius:15px;margin-bottom:9px;position:relative;overflow:hidden;transition:box-shadow .2s,border-color .2s}
+.card{background:linear-gradient(168deg,var(--surf2),var(--surf));border:1px solid var(--line);border-radius:var(--dRad);margin-bottom:var(--dCard);position:relative;overflow:hidden;transition:box-shadow .2s,border-color .2s}
 .card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--gc,var(--limeD))}
 .card.dragging{box-shadow:0 22px 44px -16px #000;border-color:var(--limeD);z-index:20}
 .card.drop-before::after,.card.drop-after::after{content:"";position:absolute;left:8px;right:8px;height:2px;background:var(--lime);border-radius:2px}
@@ -171,7 +173,7 @@ body.cal-collapsed .cal-wrap{display:none}
 .btn-timer.run{background:var(--cyanT);border-color:var(--cyan);color:var(--cyan)}
 .btn-fin{flex:0 0 106px;background:linear-gradient(135deg,var(--lime),#a8e02f);color:#0a0c07;border-color:transparent}
 .btn-fin.done{background:linear-gradient(135deg,#26311d,#1d2618);color:var(--lime2);border:1px solid var(--limeB)}
-.fsec{background:linear-gradient(165deg,var(--surf2),var(--surf));border:1px solid var(--line);border-radius:15px;padding:12px;margin-bottom:10px}
+.fsec{background:linear-gradient(165deg,var(--surf2),var(--surf));border:1px solid var(--line);border-radius:var(--dRad);padding:12px;margin-bottom:var(--dSec)}
 .fsec-h{display:flex;align-items:center;gap:8px;margin-bottom:10px}
 .fsec-h b{font-size:12.5px;font-weight:750;flex:1;min-width:0}
 .fsec-h .hint{font-size:9.5px;color:var(--txt4);font-family:var(--mono)}
@@ -223,7 +225,7 @@ body.cal-collapsed .cal-wrap{display:none}
 .ftable tr:last-child td,.htable tr:last-child td{border-bottom:none}
 .ftable .ok{color:var(--lime2)}.ftable .warn{color:var(--amber)}
 .htable .mx{color:var(--lime2);font-weight:700}.htable .dn{color:var(--amber)}
-.rest{border-radius:18px;padding:16px;margin-bottom:10px;background:linear-gradient(163deg,#1b1732 0%,#131420 46%,#0e1015 100%);border:1px solid #2c2647}
+.rest{border-radius:calc(var(--dRad) + 3px);padding:16px;margin-bottom:var(--dSec);background:linear-gradient(163deg,#1b1732 0%,#131420 46%,#0e1015 100%);border:1px solid #2c2647}
 .rest h2{margin:0 0 4px;font-size:17px;font-weight:800;letter-spacing:-.3px}
 .rest p{margin:0;font-size:11.5px;color:var(--txt2);line-height:1.5}
 .wtiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
@@ -328,13 +330,12 @@ body.cal-collapsed .cal-wrap{display:none}
 .spark{background:var(--surf);border:1px solid var(--line);border-radius:13px;padding:12px;margin-bottom:12px}
 .spark svg{width:100%;height:82px;overflow:visible}
 .empty{text-align:center;padding:36px 20px;color:var(--txt3);font-size:12.5px}
-.toast{position:fixed;left:12px;right:12px;bottom:calc(var(--dock) + env(safe-area-inset-bottom) + 14px);z-index:150;max-width:696px;margin:0 auto;background:linear-gradient(140deg,#1f2a1c,#171e17);border:1px solid var(--limeB);border-radius:12px;padding:10px 12px;font-size:12px;font-weight:650;display:flex;align-items:center;gap:9px;box-shadow:0 14px 32px -16px #000;opacity:0;transform:translateY(10px);pointer-events:none;transition:.25s}
+.toast{position:fixed;left:12px;right:12px;bottom:calc(var(--dock) + 14px);z-index:150;max-width:696px;margin:0 auto;background:linear-gradient(140deg,#1f2a1c,#171e17);border:1px solid var(--limeB);border-radius:12px;padding:10px 12px;font-size:12px;font-weight:650;display:flex;align-items:center;gap:9px;box-shadow:0 14px 32px -16px #000;opacity:0;transform:translateY(10px);pointer-events:none;transition:.25s}
 .toast.show{opacity:1;transform:none;pointer-events:auto}
 .toast.warn{background:linear-gradient(140deg,#2b2318,#1f1a14);border-color:var(--amberB)}
 .toast button{margin-left:auto;background:transparent;border:1px solid var(--line2);border-radius:8px;color:var(--lime2);font-size:10.5px;font-weight:800;padding:4px 9px;cursor:pointer}
-/* таймер */
-#rtFlash{position:fixed;inset:0;z-index:119;pointer-events:none;opacity:0;background:radial-gradient(120% 80% at 50% 50%,rgba(200,242,78,.22),rgba(200,242,78,0) 62%);transition:opacity .16s}
-#rtFlash.on{opacity:1}
+#rtFlash{position:fixed;inset:0;z-index:119;pointer-events:none;opacity:0;transition:opacity .5s ease;background:radial-gradient(120% 78% at 50% 46%,rgba(200,242,78,.16),rgba(95,198,226,.07) 42%,rgba(200,242,78,0) 68%)}
+#rtFlash.on{opacity:1;transition:opacity .12s ease}
 #rtOverlay{position:fixed;inset:0;z-index:120;display:none;flex-direction:column;padding:calc(env(safe-area-inset-top) + 10px) 14px calc(env(safe-area-inset-bottom) + 14px);background:
  radial-gradient(760px 480px at 50% 4%,rgba(200,242,78,.14),transparent 62%),
  radial-gradient(620px 520px at 96% 98%,rgba(95,198,226,.13),transparent 60%),
@@ -351,7 +352,7 @@ body.cal-collapsed .cal-wrap{display:none}
 #rtOverlay.done .rt-tag i{background:var(--green);animation:none}
 @keyframes rtBlink{0%,100%{opacity:1}50%{opacity:.32}}
 .rt-top .sp{flex:1}
-.rt-ib{width:38px;height:38px;flex:none;border-radius:12px;border:1px solid var(--line2);background:rgba(24,29,33,.86);color:var(--txt2);display:grid;place-items:center;cursor:pointer;transition:.15s;font-size:12px;font-weight:800;font-family:var(--mono)}
+.rt-ib{width:38px;height:38px;flex:none;border-radius:12px;border:1px solid var(--line2);background:rgba(24,29,33,.86);color:var(--txt2);display:grid;place-items:center;cursor:pointer;transition:.15s;font-size:14px;font-weight:800;font-family:var(--mono)}
 .rt-ib:active{transform:scale(.92)}
 .rt-ib.on{color:var(--lime);border-color:rgba(200,242,78,.45);background:rgba(200,242,78,.12)}
 .rt-ib.off{color:var(--txt4)}
@@ -388,17 +389,17 @@ body.cal-collapsed .cal-wrap{display:none}
 .rt-btn.main{grid-column:span 2;background:linear-gradient(140deg,var(--lime),#8fc63c);color:#07080a;border-color:transparent}
 .rt-btn.plus{color:var(--cyan);border-color:var(--cyanB);background:var(--cyanT)}
 .rt-btn.stop{grid-column:span 4;color:var(--red);border-color:var(--redB);background:var(--redT)}
-.rt-auto{display:flex;align-items:center;gap:9px;padding:9px 11px;border-radius:12px;background:rgba(17,20,23,.82);border:1px solid var(--line);cursor:pointer}
-.rt-auto .t{flex:1;min-width:0}
-.rt-auto b{display:block;font-size:11.5px;font-weight:700;color:var(--txt2)}
-.rt-auto span{font-size:9.5px;color:var(--txt3)}
+.tog{display:flex;align-items:center;gap:10px;cursor:pointer;background:rgba(17,20,23,.82);border:1px solid var(--line);border-radius:12px;padding:9px 11px}
+.tog .t{flex:1;min-width:0}
+.tog b{display:block;font-size:11.5px;font-weight:700;color:var(--txt2)}
+.tog span{font-size:9.5px;color:var(--txt3)}
 .sw{width:44px;height:26px;border-radius:14px;background:#20262b;border:1px solid var(--line2);position:relative;flex:none;transition:.18s}
 .sw::after{content:"";position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:#5c666d;transition:.18s}
-.on>.sw,.rt-auto.on .sw{background:rgba(200,242,78,.22);border-color:rgba(200,242,78,.5)}
-.on>.sw::after,.rt-auto.on .sw::after{left:20px;background:var(--lime)}
+.tog.on .sw{background:rgba(200,242,78,.22);border-color:rgba(200,242,78,.5)}
+.tog.on .sw::after{left:20px;background:var(--lime)}
 .rt-note{display:flex;align-items:flex-start;gap:8px;font-size:10px;line-height:1.45;color:var(--txt3);background:rgba(17,20,23,.7);border:1px solid var(--line);border-radius:12px;padding:8px 11px}
 .rt-note b{color:var(--txt2)}
-.rt-mini{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom) + 94px);z-index:118;display:none;align-items:center;gap:11px;padding:8px 12px;border-radius:999px;background:linear-gradient(140deg,#1a231a,#12181c);border:1px solid rgba(200,242,78,.42);box-shadow:0 18px 40px -18px #000;cursor:pointer}
+.rt-mini{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--dock) + 14px);z-index:118;display:none;align-items:center;gap:11px;padding:8px 12px;border-radius:999px;background:linear-gradient(140deg,#1a231a,#12181c);border:1px solid rgba(200,242,78,.42);box-shadow:0 18px 40px -18px #000;cursor:pointer}
 .rt-mini.show{display:flex}
 .rt-mini.warn{border-color:rgba(223,174,85,.6)}
 .rt-mini.done{border-color:rgba(99,198,140,.65)}
@@ -407,47 +408,59 @@ body.cal-collapsed .cal-wrap{display:none}
 .rt-mini.warn .mt{color:var(--amber)}
 .rt-mini.done .mt{color:var(--green)}
 .rt-mini .mr{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;border:1px solid var(--line2);color:var(--txt2);font-size:12px;flex:none}
-/* панель звука */
-#sndPanel{position:fixed;left:0;right:0;bottom:0;z-index:141;max-width:720px;margin:0 auto;max-height:92vh;display:flex;flex-direction:column;background:linear-gradient(180deg,#171d22,#0d1114);border-top:1px solid var(--line2);border-radius:22px 22px 0 0;transform:translateY(103%);transition:transform .32s cubic-bezier(.2,.8,.25,1);box-shadow:0 -18px 50px rgba(0,0,0,.65);padding-bottom:env(safe-area-inset-bottom)}
-#sndPanel.show{transform:none}
-#sndScrim{position:fixed;inset:0;z-index:140;background:rgba(3,4,6,.8);backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);opacity:0;pointer-events:none;transition:opacity .24s}
-#sndScrim.show{opacity:1;pointer-events:auto}
-.snd-b{flex:1;overflow:auto;padding:13px 16px 4px}
-.snd-meter{display:flex;align-items:center;gap:10px;background:var(--surf);border:1px solid var(--line);border-radius:13px;padding:10px 12px;margin-bottom:12px}
-.snd-meter .mb{flex:1;display:flex;align-items:flex-end;gap:3px;height:34px}
-.snd-meter .mb i{flex:1;background:#1c2227;border-radius:2px;height:12%;transition:height .07s linear,background .07s linear}
-.snd-meter .vv{font-family:var(--mono);font-size:15px;font-weight:800;color:var(--lime);min-width:52px;text-align:right}
-.snd-meter .kk{font-size:8px;letter-spacing:.1em;text-transform:uppercase;color:var(--txt3);font-weight:800}
-.snd-row{background:var(--surf);border:1px solid var(--line);border-radius:13px;padding:10px 12px;margin-bottom:8px}
-.snd-row.hi{border-color:rgba(200,242,78,.34);background:linear-gradient(150deg,#1a2118,#12161a)}
-.snd-row .top{display:flex;align-items:baseline;gap:8px;margin-bottom:7px}
-.snd-row .top b{font-size:12px;font-weight:700;flex:1;min-width:0}
-.snd-row .top i{font-style:normal;font-family:var(--mono);font-size:12px;font-weight:800;color:var(--lime2)}
-.snd-row .top em{font-style:normal;font-size:9.5px;color:var(--txt3);font-family:var(--mono)}
-.snd-row.cy .top i{color:var(--cyan)}.snd-row.am .top i{color:var(--amber)}
-input[type=range].sl{-webkit-appearance:none;appearance:none;width:100%;height:26px;background:transparent;outline:none;display:block}
-input[type=range].sl::-webkit-slider-runnable-track{height:6px;border-radius:4px;background:linear-gradient(90deg,var(--lime) 0%,var(--lime) var(--p,50%),#1e242a var(--p,50%),#1e242a 100%)}
-input[type=range].sl::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;margin-top:-8px;border-radius:50%;background:#0d1114;border:2px solid var(--lime);box-shadow:0 0 12px -2px rgba(200,242,78,.8);cursor:pointer}
-input[type=range].sl::-moz-range-track{height:6px;border-radius:4px;background:#1e242a}
-input[type=range].sl::-moz-range-progress{height:6px;border-radius:4px;background:var(--lime)}
-input[type=range].sl::-moz-range-thumb{width:20px;height:20px;border-radius:50%;background:#0d1114;border:2px solid var(--lime);cursor:pointer}
-.seg{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
-.seg button{height:36px;border-radius:10px;border:1px solid var(--line2);background:#191d21;color:var(--txt3);font-size:11px;font-weight:700;font-family:var(--sans);cursor:pointer}
+#melScrim{position:fixed;inset:0;z-index:140;background:rgba(3,4,6,.82);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);opacity:0;pointer-events:none;transition:opacity .24s}
+#melScrim.show{opacity:1;pointer-events:auto}
+#melPanel{position:fixed;left:0;right:0;bottom:0;z-index:141;max-width:720px;margin:0 auto;max-height:93vh;display:flex;flex-direction:column;background:linear-gradient(180deg,#171d22,#0c1013);border-top:1px solid var(--line2);border-radius:22px 22px 0 0;transform:translateY(103%);transition:transform .34s cubic-bezier(.2,.8,.25,1);box-shadow:0 -20px 54px rgba(0,0,0,.7);padding-bottom:env(safe-area-inset-bottom)}
+#melPanel.show{transform:none}
+.mel-tabs{flex:none;display:flex;gap:5px;padding:0 16px 10px}
+.mel-tabs button{flex:1;height:33px;border-radius:10px;background:var(--surf);border:1px solid var(--line);color:var(--txt3);font-size:12px;font-weight:700;font-family:var(--sans);cursor:pointer;transition:.15s}
+.mel-tabs button.on{background:var(--limeT);border-color:var(--limeB);color:var(--lime2)}
+.mel-b{flex:1;overflow:auto;padding:2px 16px 6px}
+.mel-view{display:none}.mel-view.on{display:block}
+.mel-stage{position:relative;background:linear-gradient(160deg,#141a1e,#0e1215);border:1px solid var(--line);border-radius:15px;padding:11px 12px 9px;margin-bottom:11px;overflow:hidden}
+.mel-stage .sh2{display:flex;align-items:baseline;gap:8px;margin-bottom:8px}
+.mel-stage .sh2 b{font-size:12.5px;font-weight:750;flex:1;min-width:0}
+.mel-stage .sh2 i{font-style:normal;font-family:var(--mono);font-size:10px;color:var(--txt3)}
+#melCanvas{display:block;width:100%;height:96px}
+.mel-stage .lg{display:flex;gap:9px;flex-wrap:wrap;margin-top:7px;font-size:9px;color:var(--txt3);font-family:var(--mono)}
+.mel-stage .lg span{display:flex;align-items:center;gap:4px}
+.mel-stage .lg i{width:7px;height:7px;border-radius:2px}
+.mrow{background:var(--surf);border:1px solid var(--line);border-radius:13px;padding:10px 12px;margin-bottom:8px}
+.mrow.hi{border-color:rgba(200,242,78,.32);background:linear-gradient(150deg,#19211a,#11151a)}
+.mrow .top{display:flex;align-items:baseline;gap:8px;margin-bottom:7px}
+.mrow .top b{font-size:12px;font-weight:700;flex:1;min-width:0}
+.mrow .top i{font-style:normal;font-family:var(--mono);font-size:12px;font-weight:800;color:var(--lime2)}
+.mrow .top em{font-style:normal;font-size:9.5px;color:var(--txt3);font-family:var(--mono)}
+.mrow.cy .top i{color:var(--cyan)}.mrow.vi .top i{color:var(--violet)}.mrow.am .top i{color:var(--amber)}
+input[type=range].msl{-webkit-appearance:none;appearance:none;width:100%;height:26px;background:transparent;outline:none;display:block}
+input[type=range].msl::-webkit-slider-runnable-track{height:6px;border-radius:4px;background:linear-gradient(90deg,var(--lime) 0%,var(--lime) var(--p,50%),#1e242a var(--p,50%),#1e242a 100%)}
+input[type=range].msl::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;margin-top:-8px;border-radius:50%;background:#0d1114;border:2px solid var(--lime);box-shadow:0 0 12px -2px rgba(200,242,78,.85);cursor:pointer}
+input[type=range].msl::-moz-range-track{height:6px;border-radius:4px;background:#1e242a}
+input[type=range].msl::-moz-range-progress{height:6px;border-radius:4px;background:var(--lime)}
+input[type=range].msl::-moz-range-thumb{width:20px;height:20px;border-radius:50%;background:#0d1114;border:2px solid var(--lime);cursor:pointer}
+.seg{display:grid;gap:6px}
+.seg.c3{grid-template-columns:repeat(3,1fr)}
+.seg.c4{grid-template-columns:repeat(4,1fr)}
+.seg button{height:38px;border-radius:10px;border:1px solid var(--line2);background:#191d21;color:var(--txt3);font-size:11px;font-weight:700;font-family:var(--sans);cursor:pointer;transition:.14s;padding:0 4px;line-height:1.15}
+.seg button:active{transform:scale(.95)}
 .seg button.on{background:linear-gradient(140deg,var(--lime),#93c93b);color:#07080a;border-color:transparent}
 .step{display:flex;align-items:center;gap:8px}
 .step button{width:44px;height:38px;flex:none;border-radius:11px;border:1px solid var(--line2);background:#191d21;color:var(--txt);font-size:18px;font-weight:800;cursor:pointer;font-family:var(--mono)}
 .step .val{flex:1;text-align:center;font-family:var(--mono);font-size:19px;font-weight:800;color:var(--lime)}
-.step .val small{display:block;font-size:9px;color:var(--txt3);font-weight:700;letter-spacing:.08em;text-transform:uppercase}
-.tog{display:flex;align-items:center;gap:10px;cursor:pointer}
-.tog .t{flex:1;min-width:0}
-.tog b{display:block;font-size:12px;font-weight:700}
-.tog span{font-size:9.5px;color:var(--txt3)}
+.step .val small{display:block;font-size:9px;color:var(--txt3);font-weight:700;letter-spacing:.07em;text-transform:uppercase}
+.diag{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:10px}
+.diag .d{background:var(--surf);border:1px solid var(--line);border-radius:12px;padding:9px 10px;position:relative;overflow:hidden}
+.diag .d::after{content:"";position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--green)}
+.diag .d.warn::after{background:var(--amber)}
+.diag .d .k{font-size:8px;color:var(--txt4);text-transform:uppercase;letter-spacing:.6px;font-weight:800}
+.diag .d .v{font-family:var(--mono);font-size:16px;font-weight:800;margin-top:2px}
+.diag .d .s{font-size:9px;color:var(--txt3);font-family:var(--mono);margin-top:1px}
 @media (max-width:359px){
 .sh,.set{grid-template-columns:22px 1fr 52px 52px;gap:5px}
 .cd{width:38px}.chip{font-size:10px}.chip .cn{width:15px}
 .btn-timer{flex:0 0 70px}.btn-fin{flex:0 0 92px}
 .rt-pre{height:40px;font-size:12.5px}.rt-btn{height:46px;font-size:12px}.rt-time{font-size:clamp(50px,19vw,84px)}.rt-ring{width:min(84vw,280px)}
-.seg{grid-template-columns:repeat(2,1fr)}.step button{width:38px}}
+.seg.c4{grid-template-columns:repeat(2,1fr)}.step button{width:38px}.diag{grid-template-columns:repeat(2,1fr)}}
 @media (min-width:760px){.hdr-main,.cal,.tabs,.chips,.dock-row,.prog{padding-left:max(14px,calc((100vw - 720px)/2));padding-right:max(14px,calc((100vw - 720px)/2))}.rt-ring{width:min(48vh,360px)}}
 @media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
 </style>
@@ -458,7 +471,7 @@ input[type=range].sl::-moz-range-thumb{width:20px;height:20px;border-radius:50%;
     <div class="mark"><svg viewBox="0 0 24 24"><path d="M4 9v6M7 7v10M17 7v10M20 9v6M7 12h10"/></svg></div>
     <div class="hdate"><div class="d" id="dateText">—</div><div class="w"><span id="weekText">—</span><span class="badge auto" id="srcBadge">авто</span><span id="planLabel"></span></div></div>
     <button class="ib on" id="btnSound" aria-label="Звук"><svg viewBox="0 0 24 24"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M16 9a4 4 0 0 1 0 6"/></svg></button>
-    <button class="ib" id="btnSnd" aria-label="Громкость сигнала">♪+</button>
+    <button class="ib mel" id="btnMel" aria-label="Мелодия и экран">♪</button>
     <button class="ib off" id="btnWake" aria-label="Экран"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4"/></svg></button>
     <button class="ib" id="btnImport" aria-label="Загрузить Excel"><svg viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2"/></svg></button>
     <button class="ib acc" id="btnExport">XLS</button>
@@ -489,12 +502,11 @@ input[type=range].sl::-moz-range-thumb{width:20px;height:20px;border-radius:50%;
   <div class="sheet-b" id="sheetBody"></div>
   <div class="sheet-f" id="sheetFoot"></div>
 </div>
-
 <div id="rtFlash"></div>
 <div id="rtOverlay" role="dialog" aria-modal="true" aria-label="Таймер отдыха">
   <div class="rt-top">
     <div class="rt-tag"><i></i><span id="rtState">Таймер</span></div><div class="sp"></div>
-    <button class="rt-ib" id="rtSnd" aria-label="Громкость сигнала">♪+</button>
+    <button class="rt-ib" id="rtMel" aria-label="Мелодия">♪</button>
     <button class="rt-ib on" id="rtMute" aria-label="Звук"><svg viewBox="0 0 24 24"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M16 9a4 4 0 0 1 0 6"/></svg></button>
     <button class="rt-ib" id="rtHide" aria-label="Свернуть"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
   </div>
@@ -511,33 +523,59 @@ input[type=range].sl::-moz-range-thumb{width:20px;height:20px;border-radius:50%;
     <div class="rt-presets"><button class="rt-pre" data-rt="90">1:30</button><button class="rt-pre on" data-rt="150">2:30</button><button class="rt-pre" data-rt="180">3:00</button><button class="rt-pre" data-rt="240">4:00</button></div>
     <div class="rt-row"><button class="rt-btn plus" id="rtMinus">−30</button><button class="rt-btn main" id="rtMain"><svg viewBox="0 0 24 24" id="rtMainIcon"><path d="M7 4l12 8-12 8z"/></svg><span id="rtMainTxt">Старт</span></button><button class="rt-btn plus" id="rtPlus">+30</button></div>
     <div class="rt-row"><button class="rt-btn stop" id="rtStop"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>Сбросить и закрыть</button></div>
-    <div class="rt-auto on" id="rtAuto"><div class="t"><b>Автозапуск после подхода</b><span>заполнил вес и повторы — отдых пошёл сам</span></div><div class="sw"></div></div>
+    <div class="tog on" id="rtAuto"><div class="t"><b>Автозапуск после подхода</b><span>заполнил вес и повторы — отдых пошёл сам</span></div><div class="sw"></div></div>
     <div class="rt-note"><span>ⓘ</span><span><b>Фон и Dynamic Island.</b> Счёт идёт по часам устройства — при сворачивании не теряется. Остаток виден в «Сейчас играет» на локскрине и в островке (удерживай его). Нативные Live Activities веб-приложению недоступны, поэтому работает аудио-сессия — не глуши звук системным переключателем.</span></div>
   </div>
 </div>
 <div class="rt-mini" id="rtMini"><div><div class="ml" id="rtMiniLabel">отдых</div><div class="mt" id="rtMiniTime">2:30</div></div><div class="mr" id="rtMiniBtn">⏸</div></div>
 <audio id="rtKeep" loop playsinline preload="auto"></audio>
-
-<div id="sndScrim"></div>
-<div id="sndPanel" role="dialog" aria-modal="true" aria-label="Громкость сигнала">
-  <div class="grab-zone" id="sndGrab"><div class="grab"></div></div>
-  <div class="sheet-h"><div style="min-width:0"><h2>Сигнал окончания отдыха</h2><div class="s" id="sndState">громкость и характер звука</div></div><button class="x" id="sndX">✕</button></div>
-  <div class="snd-b">
-    <div class="snd-meter"><div><div class="kk">выход</div><div class="vv" id="sndPeak">—</div></div><div class="mb" id="sndBars"></div></div>
-    <div class="snd-row hi"><div class="top"><b>Громкость сигнала</b><i id="vVol">100%</i></div><input type="range" class="sl" id="sVol" min="0" max="100" step="1" value="100"></div>
-    <div class="snd-row hi"><div class="top"><b>Усиление сверх обычного</b><i id="vBoost">2.6×</i><em>компрессор ловит пики</em></div><input type="range" class="sl" id="sBoost" min="10" max="30" step="1" value="26"></div>
-    <div class="snd-row"><div class="top"><b>Повторов сигнала</b><i id="vRep">3</i></div><div class="step"><button id="repMinus">−</button><div class="val"><span id="repVal">3</span><small>серии по 3 ноты</small></div><button id="repPlus">+</button></div></div>
-    <div class="snd-row cy"><div class="top"><b>Тон сигнала</b><i id="vHz">880 Гц</i></div><input type="range" class="sl" id="sHz" min="440" max="1600" step="20" value="880"></div>
-    <div class="snd-row"><div class="top"><b>Тембр</b><i id="vWave">square</i><em>резче = слышнее в зале</em></div><div class="seg" id="segWave"><button data-w="sine">sine</button><button data-w="triangle">triangle</button><button data-w="square" class="on">square</button><button data-w="sawtooth">saw</button></div></div>
-    <div class="snd-row cy"><div class="top"><b>Длина ноты</b><i id="vLen">200 мс</i></div><input type="range" class="sl" id="sLen" min="80" max="420" step="10" value="200"></div>
-    <div class="snd-row cy"><div class="top"><b>Пауза между сериями</b><i id="vGap">180 мс</i></div><input type="range" class="sl" id="sGap" min="60" max="500" step="10" value="180"></div>
-    <div class="snd-row am"><div class="top"><b>Щелчки последних 3 секунд</b><i id="vTick">45%</i></div><input type="range" class="sl" id="sTick" min="0" max="100" step="1" value="45"></div>
-    <div class="snd-row am"><div class="top"><b>Громкость остальных звуков</b><i id="vUi">70%</i><em>подход, кнопки</em></div><input type="range" class="sl" id="sUi" min="0" max="100" step="1" value="70"></div>
-    <div class="snd-row"><div class="tog on" id="togVib"><div class="t"><b>Вибрация в конце отдыха</b><span>длинный паттерн 220/90/220/90/320 мс</span></div><div class="sw"></div></div></div>
-    <div class="snd-row"><div class="tog on" id="togFlash"><div class="t"><b>Подсветка экрана сигналом</b><span>лаймовая вспышка в такт сериям</span></div><div class="sw"></div></div></div>
-    <div class="rt-note" style="margin-bottom:12px"><span>ⓘ</span><span><b>Предел громкости задаёт система.</b> Усиление и тембр поднимают слышимость до максимума, который разрешает iPhone: убавленный системный звук или беззвучный режим его не обойдут.</span></div>
+<div id="melScrim"></div>
+<div id="melPanel" role="dialog" aria-modal="true" aria-label="Мелодия и плотность экрана">
+  <div class="grab-zone" id="melGrab"><div class="grab"></div></div>
+  <div class="sheet-h"><div style="min-width:0"><h2>Сигнал и экран</h2><div class="s" id="melSub">мелодия окончания отдыха</div></div><button class="x" id="melX">✕</button></div>
+  <div class="mel-tabs"><button data-mtab="sound" class="on">♪ Мелодия</button><button data-mtab="screen">▣ Экран</button></div>
+  <div class="mel-b">
+    <div class="mel-view on" id="mvSound">
+      <div class="mel-stage">
+        <div class="sh2"><b id="melName">Колокольчик</b><i id="melMeta">4 ноты · 1.9 с</i></div>
+        <canvas id="melCanvas"></canvas>
+        <div class="lg" id="melLegend"></div>
+      </div>
+      <div class="mrow hi"><div class="top"><b>Мелодия</b><i id="vMel">Колокольчик</i></div>
+        <div class="seg c3" id="segMel"><button data-m="bell" class="on">Колокольчик</button><button data-m="marimba">Маримба</button><button data-m="kalimba">Калимба</button><button data-m="harp">Арфа</button><button data-m="box">Music box</button><button data-m="chime">Чайм</button></div></div>
+      <div class="mrow"><div class="top"><b>Тембр</b><i id="vTone">Стекло</i><em>из чего сделан звук</em></div>
+        <div class="seg c4" id="segTone"><button data-t="glass" class="on">Стекло</button><button data-t="wood">Дерево</button><button data-t="metal">Металл</button><button data-t="soft">Мягкий</button></div></div>
+      <div class="mrow hi"><div class="top"><b>Громкость мелодии</b><i id="vVol">72%</i></div><input type="range" class="msl" id="mVol" min="0" max="100" step="1" value="72"></div>
+      <div class="mrow cy"><div class="top"><b>Темп · пауза между нотами</b><i id="vGap">130 мс</i></div><input type="range" class="msl" id="mGap" min="50" max="320" step="5" value="130"></div>
+      <div class="mrow cy"><div class="top"><b>Тональность</b><i id="vKey">0</i><em>полутонов</em></div><input type="range" class="msl" id="mKey" min="-12" max="12" step="1" value="0"></div>
+      <div class="mrow vi"><div class="top"><b>Затухание ноты</b><i id="vDec">1.9 с</i></div><input type="range" class="msl" id="mDec" min="4" max="34" step="1" value="19"></div>
+      <div class="mrow vi"><div class="top"><b>Реверберация · воздух зала</b><i id="vRev">38%</i></div><input type="range" class="msl" id="mRev" min="0" max="100" step="1" value="38"></div>
+      <div class="mrow am"><div class="top"><b>Обертоны · блеск</b><i id="vShim">55%</i></div><input type="range" class="msl" id="mShim" min="0" max="100" step="1" value="55"></div>
+      <div class="mrow"><div class="top"><b>Повторов мелодии</b><i id="vRep">1</i></div><div class="step"><button id="mRepMinus">−</button><div class="val"><span id="mRepVal">1</span><small>проигрывание подряд</small></div><button id="mRepPlus">+</button></div></div>
+      <div class="mrow"><div class="tog on" id="mVib"><div class="t"><b>Мягкая вибрация</b><span>два коротких касания</span></div><div class="sw"></div></div></div>
+      <div class="mrow"><div class="tog on" id="mGlow"><div class="t"><b>Световая волна</b><span>плавное лаймовое свечение</span></div><div class="sw"></div></div></div>
+      <div class="mrow"><div class="tog on" id="mTick"><div class="t"><b>Тихий отсчёт последних 3 с</b><span>деревянная капля перед мелодией</span></div><div class="sw"></div></div></div>
+      <div class="rt-note" style="margin-bottom:12px"><span>ⓘ</span><span><b>Громкость задаёт система.</b> Беззвучный режим и убавленный системный звук приглушат и мелодию. Кнопка 🔔 в шапке глушит всё разом.</span></div>
+    </div>
+    <div class="mel-view" id="mvScreen">
+      <div class="diag">
+        <div class="d" id="dgTop"><div class="k">Шапка → контент</div><div class="v">—</div><div class="s">зазор</div></div>
+        <div class="d" id="dgCard"><div class="k">Между карточками</div><div class="v">—</div><div class="s">зазор</div></div>
+        <div class="d" id="dgBot"><div class="k">Контент → док</div><div class="v">—</div><div class="s">запас</div></div>
+      </div>
+      <div class="mrow hi"><div class="top"><b>Плотность интерфейса</b><i id="vDens">Обычно</i></div>
+        <div class="seg c3" id="segDens"><button data-d="tight">Компактно</button><button data-d="normal" class="on">Обычно</button><button data-d="airy">Свободно</button></div></div>
+      <div class="mrow cy"><div class="top"><b>Отступ под шапкой</b><i id="vTop">8 px</i><em>пустота закрыта</em></div><input type="range" class="msl" id="mTop" min="0" max="28" step="1" value="8"></div>
+      <div class="mrow cy"><div class="top"><b>Запас над доком</b><i id="vBot">14 px</i></div><input type="range" class="msl" id="mBot" min="4" max="40" step="1" value="14"></div>
+      <div class="mrow"><div class="top"><b>Зазор между карточками</b><i id="vCard">9 px</i></div><input type="range" class="msl" id="mCard" min="3" max="20" step="1" value="9"></div>
+      <div class="mrow"><div class="top"><b>Скругление карточек</b><i id="vRad">15 px</i></div><input type="range" class="msl" id="mRad" min="6" max="24" step="1" value="15"></div>
+      <div class="mrow am"><div class="top"><b>Боковые поля</b><i id="vSide">12 px</i></div><input type="range" class="msl" id="mSide" min="6" max="22" step="1" value="12"></div>
+      <div class="mrow"><div class="tog on" id="mClean"><div class="t"><b>Убирать пустые блоки</b><span>нулевые распорки удаляются</span></div><div class="sw"></div></div></div>
+      <div class="mrow"><div class="tog" id="mCal"><div class="t"><b>Свернуть ленту календаря</b><span>освобождает ~44 px</span></div><div class="sw"></div></div></div>
+      <div class="rt-note" style="margin-bottom:12px"><span>ⓘ</span><span><b>Что было не так.</b> Высота шапки уже включает вырез Dynamic Island, а лента добавляла его второй раз — отсюда чёрная пустота под овалами дней. Теперь отступ считается по нижней кромке шапки и пересчитывается при каждой перерисовке.</span></div>
+    </div>
   </div>
-  <div class="sheet-f"><button class="btn btn-danger" id="sndReset" style="flex:0 0 92px">Сброс</button><button class="btn" id="sndTest">▶ Тест</button><button class="btn btn-lime" id="sndDone">Готово</button></div>
+  <div class="sheet-f"><button class="btn btn-danger" id="melReset" style="flex:0 0 88px">Сброс</button><button class="btn" id="melTest">▶ Прослушать</button><button class="btn btn-lime" id="melDone">Готово</button></div>
 </div>
 <div class="toast" id="toast"></div>
 
@@ -556,6 +594,7 @@ const num=v=>{if(v==null||v==='')return null;const n=parseFloat(String(v).replac
 const nf=n=>Math.round(n).toLocaleString('ru-RU');
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const root=document.documentElement;
 const WD=['воскресенье','понедельник','вторник','среда','четверг','пятница','суббота'];
 const WD_S=['вс','пн','вт','ср','чт','пт','сб'];
 const MON_F=['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
@@ -566,7 +605,7 @@ const DAY_FULL={1:'Низ: ноги',2:'Верх A: грудь, спина, пл
 const DAY_TIME={1:'90–97 мин',2:'80–85 мин',3:'около 93 мин'},DAY_WD={1:'понедельник',2:'среда',3:'пятница'};
 const GC={legs:'#b2d556',chest:'#5fc6e2',back:'#9d86e0',delts:'#dfae55',arms:'#63c68c'};
 const HUES=['#b2d556','#5fc6e2','#dfae55','#9d86e0','#63c68c','#dd7368','#c9bb9c','#dd9450'];
-const R=(a,b)=>a+'–'+b,KEY='gymDiary.v11',RTKEY='gymDiary.restTimer.v5',SNDKEY='gymDiary.sound.v3';
+const R=(a,b)=>a+'–'+b,KEY='gymDiary.v11',RTKEY='gymDiary.restTimer.v6',MELKEY='gymDiary.melody.v2',LAYKEY='gymDiary.layout.v2';
 const MOON='<svg viewBox="0 0 24 24"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg>';
 const W=(w,r)=>({type:'разминка',planW:w,planR:String(r)}),K=(w,r)=>({type:'рабочий',planW:w,planR:r});
 /* ═══ программа ═══ */
@@ -692,7 +731,7 @@ const PLAN_HIST={'2026-11-23':{day:1,ex:[['Приседание со штанг�
 /* ═══ состояние ═══ */
 let S={date:null,tab:'work',planDate:'23.11.2026',plan:JSON.parse(JSON.stringify(EXERCISES)),log:{},parked:{},touched:{},override:{},weights:{},watch:{},feel:{},cardio:{},inbody:JSON.parse(JSON.stringify(INBODY)),summary:SUMMARY_SEED.slice(),collapsed:false,closed:{},sound:true,wake:true,restChecks:{},coachTab:'work',hist:{q:'',day:0,sort:'date'},histSel:[]};
 let undoStack=[],toastT=null,planPreview=null,drag=null,wakeLock=null,wakeOn=false,lastRepair=[],pickYear=2026;
-let calNodes=[],calMarks=[],calBuilt=null,calScrolled=null,calRaf=0;
+let calNodes=[],calMarks=[],calBuilt=null,calScrolled=null,calRaf=0,layoutBusy=false;
 const pkey=(k,d)=>k+'|'+d;
 function setsFromSeed(k){const s=SEED[k],o={};if(!s)return o;s.ex.forEach((a,ei)=>a.forEach((p,si)=>{o[ei+'_'+si]={w:p[0],r:p[1]}}));return o}
 function snap(){return JSON.stringify({log:S.log,parked:S.parked,override:S.override,plan:S.plan,feel:S.feel,watch:S.watch,weights:S.weights,cardio:S.cardio,touched:S.touched})}
@@ -737,49 +776,85 @@ let o='';if(avg==null)o='';else if(wv.length<2)o='мало данных по в�
 if(avg!=null)prev=avg;if(wv.length||tr.length)out.push({start:st,avg,dl,n:wv.length,tr:tr.length,vol:vv,out:o});st=addD(st,7)}
 return out}
 function trendOf(ei){const a=ANALYSIS[S.date],res=resolve(S.date);if(!a||!res.day)return null;const e=S.plan[res.day][ei];if(!e)return null;const it=a.items.find(i=>i.n===e.name||i.n===jn(e));return it?it.s:null}
-/* ═══ ЗВУК: усиленный тракт ═══ */
-const SND_DEF={vol:100,boost:26,rep:3,hz:880,wave:'square',len:200,gap:180,tick:45,ui:70,vib:true,flash:true};
-let C=Object.assign({},SND_DEF);
-try{const q=JSON.parse(localStorage.getItem(SNDKEY)||'null');if(q)C=Object.assign({},SND_DEF,q)}catch(e){}
-let AC=null,bus=null,comp=null,ana=null,abuf=null,meterRaf=0,peak=0;
+/* ═══ МЕЛОДИЯ ═══ */
+const MEL={
+bell:{name:'Колокольчик',base:1046.50,notes:[0,4,7,12],gap:130,dec:19,shim:55},
+marimba:{name:'Маримба',base:783.99,notes:[7,12,16,19],gap:110,dec:11,shim:32},
+kalimba:{name:'Калимба',base:659.25,notes:[4,9,12,16],gap:145,dec:15,shim:44},
+harp:{name:'Арфа',base:523.25,notes:[0,4,7,11,12,16],gap:72,dec:23,shim:40},
+box:{name:'Music box',base:1046.50,notes:[16,14,12,7],gap:175,dec:25,shim:62},
+chime:{name:'Чайм',base:1046.50,notes:[0,7],gap:280,dec:30,shim:70}};
+const TONE={
+glass:{name:'Стекло',parts:[1,.46,.26,.13,.07],ratios:[1,2,3,4.02,5.4],det:2,atk:.005,mallet:.10},
+wood:{name:'Дерево',parts:[1,.34,.12,.05],ratios:[1,2,3,4],det:0,atk:.003,mallet:.34},
+metal:{name:'Металл',parts:[1,.52,.34,.22,.14,.08],ratios:[1,2.01,2.99,4.16,5.43,6.8],det:5,atk:.004,mallet:.16},
+soft:{name:'Мягкий',parts:[1,.22,.08],ratios:[1,2,3],det:0,atk:.020,mallet:.04}};
+const MEL_DEF={mel:'bell',tone:'glass',vol:72,gap:130,key:0,dec:19,rev:38,shim:55,rep:1,vib:true,glow:true,tick:true};
+let C=Object.assign({},MEL_DEF);
+try{const q=JSON.parse(localStorage.getItem(MELKEY)||'null');if(q)C=Object.assign({},MEL_DEF,q)}catch(e){}
+function cStore(){try{localStorage.setItem(MELKEY,JSON.stringify(C))}catch(e){}}
+let AC=null,dry=null,wet=null,conv=null,master=null,comp=null,live=[],playStart=0,playDur=0,stageRaf=0;
+function soundOn(){return !!S.sound}
 function actx(){if(AC)return AC;
 try{AC=new (window.AudioContext||window.webkitAudioContext)();
-comp=AC.createDynamicsCompressor();comp.threshold.setValueAtTime(-14,AC.currentTime);comp.knee.setValueAtTime(8,AC.currentTime);
-comp.ratio.setValueAtTime(6,AC.currentTime);comp.attack.setValueAtTime(.003,AC.currentTime);comp.release.setValueAtTime(.14,AC.currentTime);
-bus=AC.createGain();bus.gain.value=1;ana=AC.createAnalyser();ana.fftSize=512;ana.smoothingTimeConstant=.4;abuf=new Uint8Array(ana.fftSize);
-bus.connect(comp);comp.connect(ana);ana.connect(AC.destination)}catch(e){AC=null}
+master=AC.createGain();master.gain.value=1;
+comp=AC.createDynamicsCompressor();comp.threshold.setValueAtTime(-10,AC.currentTime);comp.knee.setValueAtTime(10,AC.currentTime);
+comp.ratio.setValueAtTime(4,AC.currentTime);comp.attack.setValueAtTime(.004,AC.currentTime);comp.release.setValueAtTime(.2,AC.currentTime);
+dry=AC.createGain();dry.gain.value=1;wet=AC.createGain();wet.gain.value=C.rev/100*.9;conv=AC.createConvolver();
+dry.connect(master);conv.connect(wet);wet.connect(master);master.connect(comp);comp.connect(AC.destination);
+const sec=2.4,len=Math.floor(AC.sampleRate*sec),b=AC.createBuffer(2,len,AC.sampleRate);
+for(let ch=0;ch<2;ch++){const d=b.getChannelData(ch);for(let i=0;i<len;i++){const t=i/len;d[i]=(Math.random()*2-1)*Math.pow(1-t,2.6)*(1-t*.2)*(ch?.94:1)}}
+conv.buffer=b}catch(e){AC=null}
 return AC}
 function awake(){const c=actx();if(c&&c.state==='suspended')c.resume();return c}
-function sndStore(){try{localStorage.setItem(SNDKEY,JSON.stringify(C))}catch(e){}}
-function note(f,at,dur,g,wave,det){const c=actx();if(!c)return;
-const o=c.createOscillator(),gn=c.createGain();o.type=wave||'sine';o.frequency.setValueAtTime(f,at);if(det)o.detune.setValueAtTime(det,at);
-gn.gain.setValueAtTime(0,at);gn.gain.linearRampToValueAtTime(g,at+.012);gn.gain.setValueAtTime(g,at+Math.max(.02,dur-.05));
-gn.gain.exponentialRampToValueAtTime(.0008,at+dur);o.connect(gn);gn.connect(bus);o.start(at);o.stop(at+dur+.04)}
-function chord(base,at,dur,g,wave){note(base,at,dur,g,wave,0);note(base*2,at,dur,g*.42,wave,6);note(base*1.5,at,dur,g*.30,wave,-6)}
-function flash(ms){if(!C.flash)return;const f=$('rtFlash');f.classList.add('on');setTimeout(()=>f.classList.remove('on'),ms||140)}
-function buzz(p){if(!S.sound||!C.vib)return;if(navigator.vibrate)try{navigator.vibrate(p)}catch(e){}}
-function beep(kind){
-if(!S.sound)return;const c=awake();if(!c)return;const t=c.currentTime+.02,ui=(C.ui/100)*.9;
-if(kind==='end'){
-const amp=(C.vol/100)*(C.boost/10),len=C.len/1000,gap=C.gap/1000,series=[1,1.335,1.78];
-for(let r=0;r<C.rep;r++){const off=r*(len*3+gap);
-series.forEach((m,i)=>chord(C.hz*m,t+off+i*len*.92,len,amp*(i===2?1:.86),C.wave));
-setTimeout(()=>flash(140),off*1000)}
-buzz([220,90,220,90,320]);meter();return}
-if(kind==='tick'){const a=(C.tick/100)*.9;if(a<=0)return;note(C.hz*.86,t,.10,a,'sine',0);meter();return}
-if(kind==='err'){note(190,t,.22,ui*1.1,'sawtooth',0);meter();return}
-note(659,t,.09,ui,'sine',0);note(988,t+.11,.14,ui,'sine',0);meter()}
-function meter(){if(!ana||meterRaf)return;const bars=$('sndBars').children;
-const loop=()=>{if(!ana){meterRaf=0;return}
-ana.getByteTimeDomainData(abuf);let mx=0;for(let i=0;i<abuf.length;i++){const v=Math.abs(abuf[i]-128)/128;if(v>mx)mx=v}
-peak=Math.max(mx,peak*.86);const pct=Math.round(clamp(peak,0,1)*100);
-$('sndPeak').textContent=pct?pct+'%':'—';
-for(let b=0;b<bars.length;b++){const thr=(b+1)/bars.length,on=peak>=thr*.92;
-bars[b].style.height=(on?(28+thr*70):12)+'%';bars[b].style.background=on?(thr>.86?'#dd7368':thr>.62?'#dfae55':'#b2d556'):'#1c2227'}
-if(peak<.004&&!$('sndPanel').classList.contains('show')){meterRaf=0;$('sndPeak').textContent='—';
-for(let k=0;k<bars.length;k++){bars[k].style.height='12%';bars[k].style.background='#1c2227'}return}
-meterRaf=requestAnimationFrame(loop)};
-meterRaf=requestAnimationFrame(loop)}
+function stopLive(){for(let i=0;i<live.length;i++){try{live[i].stop()}catch(e){}}live=[]}
+function freq(base,semi){return base*Math.pow(2,semi/12)}
+function voice(f,at,dur,g,tone,shim){const c=actx();if(!c)return;
+const T=TONE[tone]||TONE.glass,lp=c.createBiquadFilter();
+lp.type='lowpass';lp.frequency.setValueAtTime(clamp(f*7,1200,13000),at);lp.Q.setValueAtTime(.6,at);
+lp.connect(dry);lp.connect(conv);
+for(let i=0;i<T.parts.length;i++){
+const amp=T.parts[i]*(i===0?1:shim/100);if(amp<.006)continue;
+const o=c.createOscillator(),gn=c.createGain();o.type='sine';
+o.frequency.setValueAtTime(f*T.ratios[i],at);if(T.det)o.detune.setValueAtTime(i%2?T.det:-T.det,at);
+let d=dur*(1-i*.11);if(d<.12)d=.12;const pk=g*amp;
+gn.gain.setValueAtTime(0,at);gn.gain.linearRampToValueAtTime(pk,at+T.atk);gn.gain.exponentialRampToValueAtTime(.0006,at+d);
+o.connect(gn);gn.connect(lp);o.start(at);o.stop(at+d+.06);live.push(o)}
+if(T.mallet>.02){const n=Math.floor(c.sampleRate*.035),nb=c.createBuffer(1,n,c.sampleRate),nd=nb.getChannelData(0);
+for(let j=0;j<n;j++)nd[j]=(Math.random()*2-1)*Math.pow(1-j/n,5);
+const src=c.createBufferSource();src.buffer=nb;
+const bp=c.createBiquadFilter();bp.type='bandpass';bp.frequency.setValueAtTime(clamp(f*2.2,600,7000),at);bp.Q.setValueAtTime(1.4,at);
+const ng=c.createGain();ng.gain.setValueAtTime(g*T.mallet*.5,at);ng.gain.exponentialRampToValueAtTime(.0004,at+.05);
+src.connect(bp);bp.connect(ng);ng.connect(dry);ng.connect(conv);src.start(at);src.stop(at+.06);live.push(src)}}
+function drop(at,g){const c=actx();if(!c)return;
+const o=c.createOscillator(),gn=c.createGain();o.type='sine';
+o.frequency.setValueAtTime(1180,at);o.frequency.exponentialRampToValueAtTime(760,at+.09);
+gn.gain.setValueAtTime(0,at);gn.gain.linearRampToValueAtTime(g,at+.004);gn.gain.exponentialRampToValueAtTime(.0005,at+.14);
+o.connect(gn);gn.connect(dry);gn.connect(conv);o.start(at);o.stop(at+.18);live.push(o)}
+function glow(ms){if(!C.glow)return;const f=$('rtFlash');f.classList.add('on');setTimeout(()=>f.classList.remove('on'),ms||420)}
+function buzz(p){if(!S.sound)return;
+if(Array.isArray(p)&&p.reduce((a,b)=>a+b,0)>420){if(C.vib&&navigator.vibrate)try{navigator.vibrate([14,70,14])}catch(e){}return}
+if(navigator.vibrate)try{navigator.vibrate(p)}catch(e){}}
+function playMelody(){if(!soundOn())return 0;const c=awake();if(!c)return 0;
+stopLive();wet.gain.setValueAtTime(C.rev/100*.9,c.currentTime);
+const M=MEL[C.mel]||MEL.bell,gap=C.gap/1000,dec=C.dec/10,vol=(C.vol/100)*.62,t0=c.currentTime+.04;
+let total=0;
+for(let r=0;r<C.rep;r++){const off=r*(M.notes.length*gap+dec*.45+.22);
+for(let i=0;i<M.notes.length;i++)voice(freq(M.base,M.notes[i]+C.key),t0+off+i*gap,dec,vol*(i===M.notes.length-1?1:.9),C.tone,C.shim);
+total=off+M.notes.length*gap+dec;
+setTimeout(()=>glow(420),off*1000)}
+playStart=performance.now();playDur=total*1000;
+if(C.vib&&navigator.vibrate)try{navigator.vibrate([14,70,14])}catch(e){}
+drawStage();return total}
+function playTick(){if(!soundOn()||!C.tick)return;const c=awake();if(!c)return;drop(c.currentTime+.01,(C.vol/100)*.16)}
+function beep(kind){if(kind==='end'){playMelody();return}if(kind==='tick'){playTick();return}
+if(!soundOn())return;const c=awake();if(!c)return;const t=c.currentTime+.02,g=.16;
+if(kind==='err'){const o=c.createOscillator(),gn=c.createGain();o.type='sawtooth';o.frequency.setValueAtTime(190,t);
+gn.gain.setValueAtTime(0,t);gn.gain.linearRampToValueAtTime(g,t+.01);gn.gain.exponentialRampToValueAtTime(.0005,t+.22);
+o.connect(gn);gn.connect(dry);o.start(t);o.stop(t+.26);return}
+[[659,0,.09],[988,.11,.14]].forEach(a=>{const o=c.createOscillator(),gn=c.createGain();o.type='sine';o.frequency.setValueAtTime(a[0],t+a[1]);
+gn.gain.setValueAtTime(0,t+a[1]);gn.gain.linearRampToValueAtTime(g,t+a[1]+.01);gn.gain.exponentialRampToValueAtTime(.0005,t+a[1]+a[2]);
+o.connect(gn);gn.connect(dry);gn.connect(conv);o.start(t+a[1]);o.stop(t+a[1]+a[2]+.04)})}
 function askNotif(){try{if('Notification' in window&&Notification.permission==='default')Notification.requestPermission()}catch(e){}}
 function notifyRest(){try{if('Notification' in window&&Notification.permission==='granted')new Notification('Отдых закончен',{body:'Следующий подход',tag:'rest',renotify:true})}catch(e){}}
 async function reqWake(){if(!S.wake||!('wakeLock' in navigator)){$('btnWake').className='ib off';return}
@@ -789,39 +864,42 @@ function relWake(){try{if(wakeLock){wakeLock.release();wakeLock=null}}catch(e){}
 function toast(msg,warn,action){const t=$('toast');t.className='toast show'+(warn?' warn':'');t.innerHTML='<span>'+esc(msg)+'</span>';
 if(action){const b=document.createElement('button');b.textContent=action.label;b.onclick=()=>{action.fn();t.classList.remove('show')};t.appendChild(b)}
 clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),action?5200:2600)}
-/* ═══ панель звука ═══ */
-(function(){const w=$('sndBars');for(let i=0;i<14;i++)w.appendChild(document.createElement('i'))})();
-function slpct(i){const el=$(i),mn=+el.min,mx=+el.max;el.style.setProperty('--p',((el.value-mn)/(mx-mn)*100)+'%')}
-function sndPaint(){
-$('sVol').value=C.vol;$('sBoost').value=C.boost;$('sHz').value=C.hz;$('sLen').value=C.len;$('sGap').value=C.gap;$('sTick').value=C.tick;$('sUi').value=C.ui;
-['sVol','sBoost','sHz','sLen','sGap','sTick','sUi'].forEach(slpct);
-$('vVol').textContent=C.vol+'%';$('vBoost').textContent=(C.boost/10).toFixed(1)+'×';$('vHz').textContent=C.hz+' Гц';
-$('vLen').textContent=C.len+' мс';$('vGap').textContent=C.gap+' мс';$('vTick').textContent=C.tick+'%';$('vUi').textContent=C.ui+'%';
-$('vRep').textContent=C.rep;$('repVal').textContent=C.rep;$('vWave').textContent=C.wave==='sawtooth'?'saw':C.wave;
-[].forEach.call($('segWave').children,b=>b.classList.toggle('on',b.dataset.w===C.wave));
-$('togVib').classList.toggle('on',!!C.vib);$('togFlash').classList.toggle('on',!!C.flash);
-$('sndState').textContent=S.sound?(C.vol+'% · усиление '+(C.boost/10).toFixed(1)+'× · '+C.rep+' серии'):'звук выключен кнопкой 🔔 в шапке'}
-let pvT=0;function sndPreview(force){const n=Date.now();if(!force&&n-pvT<170)return;pvT=n;beep('end')}
-function sndOpen(){$('sndScrim').classList.add('show');$('sndPanel').classList.add('show');sndPaint();awake()}
-function sndClose(){$('sndScrim').classList.remove('show');$('sndPanel').classList.remove('show')}
-$('sndX').onclick=sndClose;$('sndDone').onclick=sndClose;$('sndScrim').onclick=sndClose;
-$('sndTest').onclick=()=>{awake();sndPreview(true)};
-$('sndReset').onclick=()=>{C=Object.assign({},SND_DEF);sndStore();sndPaint();sndPreview(true)};
-[['sVol','vol'],['sBoost','boost'],['sHz','hz'],['sLen','len'],['sGap','gap'],['sTick','tick'],['sUi','ui']].forEach(p=>{
-$(p[0]).addEventListener('input',e=>{C[p[1]]=+e.target.value;sndStore();sndPaint();
-if(p[1]==='tick')beep('tick');else if(p[1]==='ui')beep('ok');else sndPreview()})});
-$('segWave').onclick=e=>{const b=e.target.closest('[data-w]');if(!b)return;C.wave=b.dataset.w;sndStore();sndPaint();sndPreview(true)};
-$('repMinus').onclick=()=>{C.rep=clamp(C.rep-1,1,5);sndStore();sndPaint();sndPreview(true)};
-$('repPlus').onclick=()=>{C.rep=clamp(C.rep+1,1,5);sndStore();sndPaint();sndPreview(true)};
-$('togVib').onclick=()=>{C.vib=!C.vib;sndStore();sndPaint();if(C.vib)buzz(120)};
-$('togFlash').onclick=()=>{C.flash=!C.flash;sndStore();sndPaint();if(C.flash)flash(200)};
-$('btnSnd').onclick=sndOpen;$('rtSnd').onclick=sndOpen;
-(function(){const g=$('sndGrab'),p=$('sndPanel');let sy=0,dy=0,on=false;
-g.addEventListener('pointerdown',e=>{on=true;sy=e.clientY;dy=0;p.style.transition='none'});
-window.addEventListener('pointermove',e=>{if(!on)return;dy=Math.max(0,e.clientY-sy);p.style.transform='translateY('+dy+'px)'});
-window.addEventListener('pointerup',()=>{if(!on)return;on=false;p.style.transition='';p.style.transform='';if(dy>90)sndClose()})})();
+/* ═══ РАСКЛАДКА ═══ */
+const LAY_DEF={dens:'normal',top:8,bot:14,card:9,rad:15,side:12,clean:true};
+let L=Object.assign({},LAY_DEF);
+try{const q=JSON.parse(localStorage.getItem(LAYKEY)||'null');if(q)L=Object.assign({},LAY_DEF,q)}catch(e){}
+function lStore(){try{localStorage.setItem(LAYKEY,JSON.stringify(L))}catch(e){}}
+const scrollEl=$('scroll'),hdrEl=document.querySelector('.hdr'),dockEl=document.querySelector('.dock'),contentEl=$('content');
+function cleanEmpties(){if(!L.clean||!contentEl)return;
+[].slice.call(contentEl.children).forEach(n=>{if((n.tagName==='DIV'||n.tagName==='SPAN')&&!n.attributes.length&&!n.innerHTML.trim())n.remove()})}
+function layout(){if(layoutBusy||!scrollEl||!hdrEl)return;layoutBusy=true;
+const hb=hdrEl.getBoundingClientRect().bottom,dh=dockEl?dockEl.getBoundingClientRect().height:80;
+root.style.setProperty('--hdr',hb+'px');root.style.setProperty('--dock',dh+'px');
+root.style.setProperty('--fixTop',(hb+L.top)+'px');root.style.setProperty('--fixBot',(dh+L.bot)+'px');
+root.style.setProperty('--dCard',L.card+'px');root.style.setProperty('--dSec',(L.card+1)+'px');
+root.style.setProperty('--dRad',L.rad+'px');root.style.setProperty('--dSide',L.side+'px');
+cleanEmpties();diag(hb,dh);layoutBusy=false}
+function diag(hb,dh){if(!$('dgTop'))return;
+const first=contentEl&&contentEl.firstElementChild;
+const gapTop=first?Math.round(first.getBoundingClientRect().top-hb):Math.round(L.top);
+const cards=contentEl?contentEl.querySelectorAll('.card,.fsec'):[];
+let gapCard=L.card;
+if(cards.length>1){const a=cards[0].getBoundingClientRect(),b=cards[1].getBoundingClientRect();gapCard=Math.round(b.top-a.bottom)}
+const last=contentEl&&contentEl.lastElementChild,dockTop=dockEl?dockEl.getBoundingClientRect().top:window.innerHeight;
+const gapBot=last?Math.round(dockTop-last.getBoundingClientRect().bottom):0;
+setDiag('dgTop',gapTop,gapTop<=L.top+6);setDiag('dgCard',gapCard,gapCard<=L.card+4);setDiag('dgBot',Math.max(0,gapBot),gapBot>=L.bot-4)}
+function setDiag(id,v,ok){const d=el$(id);if(!d)return;d.classList.toggle('warn',!ok);
+d.querySelector('.v').textContent=v+' px';d.querySelector('.s').textContent=ok?'норма':'проверь'}
+function el$(i){return document.getElementById(i)}
+function applyDens(d){if(d==='tight'){L.card=6;L.top=5;L.bot=10;L.rad=13}
+else if(d==='airy'){L.card=14;L.top=14;L.bot=22;L.rad=18}else{L.card=9;L.top=8;L.bot=14;L.rad=15}L.dens=d}
+if(window.ResizeObserver){const ro=new ResizeObserver(()=>layout());ro.observe(hdrEl);if(dockEl)ro.observe(dockEl)}
+if(window.MutationObserver){const mo=new MutationObserver(()=>layout());mo.observe(contentEl,{childList:true});mo.observe(hdrEl,{attributes:true,attributeFilter:['class','style']})}
+window.addEventListener('resize',()=>{sizeCanvas();drawStage();layout()});
+window.addEventListener('orientationchange',()=>setTimeout(()=>{sizeCanvas();drawStage();layout()},220));
+setInterval(layout,1500);
 /* ═══ ТАЙМЕР ═══ */
-const RT={mode:'idle',preset:150,endAt:0,left:150,auto:true,notified:false,ctx:null,iv:null,art:'',mediaAt:0,lastBeep:-1};
+const RT={mode:'idle',preset:150,endAt:0,left:150,auto:true,notified:false,ctx:null,iv:null,art:'',mediaAt:0,lastTick:-1};
 const CIRC=2*Math.PI*88,baseTitle=document.title;
 const fmtT=s=>{s=Math.max(0,Math.round(s));return Math.floor(s/60)+':'+pad(s%60)};
 function rtStore(){try{localStorage.setItem(RTKEY,JSON.stringify({m:RT.mode,p:RT.preset,e:RT.endAt,l:RT.left,a:RT.auto,c:RT.ctx}))}catch(e){}}
@@ -892,13 +970,13 @@ function rtOpen(){$('rtOverlay').classList.add('show');rtPaint()}
 function rtClose(){$('rtOverlay').classList.remove('show');rtPaint()}
 function rtLoop(){clearInterval(RT.iv);RT.iv=setInterval(()=>{if(RT.mode!=='running')return;
 const l=Math.ceil((RT.endAt-Date.now())/1000);if(l<=0){rtFinish();return}
-if(l!==RT.left){RT.left=l;rtPaint();if(l<=3&&l!==RT.lastBeep){RT.lastBeep=l;beep('tick')}
+if(l!==RT.left){RT.left=l;rtPaint();if(l<=3&&l!==RT.lastTick){RT.lastTick=l;playTick()}
 if(Date.now()-RT.mediaAt>900){RT.mediaAt=Date.now();rtMeta();rtStore()}}},250)}
-function rtFinish(){clearInterval(RT.iv);RT.iv=null;RT.mode='done';RT.left=0;RT.endAt=Date.now();RT.lastBeep=-1;rtStore();
+function rtFinish(){clearInterval(RT.iv);RT.iv=null;RT.mode='done';RT.left=0;RT.endAt=Date.now();RT.lastTick=-1;rtStore();
 beep('end');if(!RT.notified){RT.notified=true;notifyRest()}
 rtMeta();rtPaint();toast('Отдых закончен — следующий подход');if(document.visibilityState==='visible')rtOpen()}
 function rtStart(sec){sec=Math.max(15,Math.round(sec||RT.preset||150));
-RT.preset=sec;RT.left=sec;RT.endAt=Date.now()+sec*1000;RT.mode='running';RT.notified=false;RT.lastBeep=-1;rtStore();
+RT.preset=sec;RT.left=sec;RT.endAt=Date.now()+sec*1000;RT.mode='running';RT.notified=false;RT.lastTick=-1;rtStore();
 askNotif();awake();rtSession();rtLoop();rtMeta();rtPaint();rtOpen();buzz(12);reqWake()}
 function rtPause(){if(RT.mode!=='running')return;RT.left=Math.max(0,Math.ceil((RT.endAt-Date.now())/1000));RT.mode='paused';
 clearInterval(RT.iv);RT.iv=null;rtStore();rtMeta();rtPaint()}
@@ -907,23 +985,23 @@ function rtAdd(d){if(RT.mode==='running'){RT.endAt+=d*1000;RT.left=Math.max(1,Ma
 else if(RT.mode==='paused'){RT.left=Math.max(5,RT.left+d);RT.preset=Math.max(RT.preset,RT.left)}
 else{RT.preset=Math.max(15,RT.preset+d);RT.left=RT.preset}
 rtStore();rtMeta();rtPaint();buzz(8)}
-function rtStop(cl){clearInterval(RT.iv);RT.iv=null;RT.mode='idle';RT.left=RT.preset;RT.endAt=0;RT.notified=false;RT.lastBeep=-1;
+function rtStop(cl){clearInterval(RT.iv);RT.iv=null;RT.mode='idle';RT.left=RT.preset;RT.endAt=0;RT.notified=false;RT.lastTick=-1;
 rtStore();rtUnsess();rtPaint();if(cl!==false)rtClose()}
 function rtPreset(sec){RT.preset=sec;if(RT.mode==='running'){rtStart(sec);return}RT.left=sec;if(RT.mode==='done')RT.mode='idle';rtStore();rtPaint()}
 function rtResync(){if(RT.mode==='running'){const l=Math.ceil((RT.endAt-Date.now())/1000);if(l<=0){rtFinish();return}RT.left=l;rtLoop()}
 if(RT.mode==='running'||RT.mode==='paused')rtSession();rtMeta();rtPaint()}
 $('rtMain').onclick=()=>{RT.mode==='running'?rtPause():rtResume()};
 $('rtStop').onclick=()=>rtStop(true);$('rtPlus').onclick=()=>rtAdd(30);$('rtMinus').onclick=()=>rtAdd(-30);$('rtHide').onclick=rtClose;
-$('rtMute').onclick=()=>{S.sound=!S.sound;save();renderHeader();rtPaint();if(S.sound)beep('tick');toast(S.sound?'Звук и вибрация включены':'Звук выключен',!S.sound)};
+$('rtMute').onclick=()=>{S.sound=!S.sound;save();renderHeader();rtPaint();paintMel();if(S.sound)beep('ok');toast(S.sound?'Звук и вибрация включены':'Звук выключен',!S.sound)};
 $('rtAuto').onclick=()=>{RT.auto=!RT.auto;rtStore();rtPaint();toast(RT.auto?'Автозапуск после подхода включён':'Автозапуск выключен')};
 document.querySelectorAll('.rt-pre').forEach(b=>b.onclick=()=>rtPreset(+b.dataset.rt));
 $('rtMini').onclick=e=>{if(e.target.closest('#rtMiniBtn')){RT.mode==='running'?rtPause():RT.mode==='done'?rtStop(true):rtResume();return}rtOpen()};
 $('rtOverlay').addEventListener('click',e=>{if(e.target===$('rtOverlay'))rtClose()});
 $('btnTimer').onclick=()=>{$('rtOverlay').classList.contains('show')?rtClose():rtOpen()};
 $('rtKeep').addEventListener('pause',()=>{if(RT.mode==='running'&&document.visibilityState==='visible')rtPause()});
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){rtResync();if(S.wake&&!wakeOn)reqWake()}});
-window.addEventListener('pageshow',rtResync);window.addEventListener('focus',rtResync);
-window.addEventListener('beforeunload',()=>{save();rtStore();sndStore()});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){rtResync();layout();if(S.wake&&!wakeOn)reqWake()}});
+window.addEventListener('pageshow',()=>{rtResync();layout()});window.addEventListener('focus',rtResync);
+window.addEventListener('beforeunload',()=>{save();rtStore();cStore();lStore()});
 const rtGuard={};
 document.addEventListener('input',e=>{const i=e.target;
 if(!RT.auto||!i.classList||!i.classList.contains('inp'))return;
@@ -970,8 +1048,7 @@ openSheet('Перейти к месяцу','календарь до 31.12.2027',
 $('sheetBody').onclick=e=>{const y=e.target.closest('[data-year]');if(y){pickYear=+y.dataset.year;return openMonthPicker()}
 const m=e.target.closest('[data-month]');if(m){closeSheet();go(m.dataset.month)}}}
 /* ═══ рендер ═══ */
-function renderAll(){renderHeader();buildCal();paintCal();renderChips();renderBody();renderDock();measureHdr()}
-function measureHdr(){const h=document.querySelector('.hdr').getBoundingClientRect().height;document.documentElement.style.setProperty('--hdr',h+'px')}
+function renderAll(){renderHeader();buildCal();paintCal();renderChips();renderBody();renderDock();layout()}
 function renderHeader(){const k=S.date,d=pk(k),res=resolve(k);
 document.body.classList.toggle('cal-collapsed',!!S.collapsed);
 $('dateText').textContent=fd(k);
@@ -990,11 +1067,11 @@ function noticeHTML(){const k=S.date,res=resolve(k),pkd=parkedOf(k).filter(p=>p.
 if(!pkd.length)return '';const p=pkd[0];
 return '<div class="notice"><span>🗂</span><span><b>На эту дату отложен День '+p.day+'</b>'+filledCount(p.rec)+' подходов · '+nf(volOfRec(p.rec))+' кг — данные целы</span><button class="act" data-restore="'+p.day+'">Вернуть</button></div>'}
 function renderBody(){const c=$('content');
-if(S.tab==='feel'){c.innerHTML=feelHTML();return}
-const res=resolve(S.date);if(!res.day){c.innerHTML=noticeHTML()+restHTML();return}
+if(S.tab==='feel'){c.innerHTML=feelHTML();layout();return}
+const res=resolve(S.date);if(!res.day){c.innerHTML=noticeHTML()+restHTML();layout();return}
 const ex=S.plan[res.day],k=S.date,r=S.log[k],pd=prevDate(res.day,k),cnt=countSets(k),a=ANALYSIS[k];
 let h='<div class="sess-line"><span class="t">'+fs(k)+' · День '+res.day+' — '+DAY_NAMES[res.day]+'</span><span class="s" id="sessCount">'+cnt.done+'/'+cnt.total+'</span><span class="vol" id="sessVol">'+(volOf(k)?nf(volOf(k))+' кг':'')+'</span>'+
-(a?'<button class="ic vi" data-coach="1">📊</button>':'')+'<button class="ic cy" data-planimport="1">⇩</button><button class="ic" data-data="1">🗂</button></div>'+noticeHTML();
+(a?'<button class="ic vi" data-coach="1">📊</button>':'')+'<button class="ic cy" data-planimport="1">⇩</button><button class="ic cy" data-history="1">🕘</button><button class="ic" data-data="1">🗂</button></div>'+noticeHTML();
 if(a)h+='<div class="notice" style="background:var(--violetT);border-color:var(--violetB)"><span>📊</span><span><b style="color:var(--violet)">Разбор тренера готов</b>'+esc(a.verdict.slice(0,104))+'…</span><button class="act" data-coach="1">Открыть</button></div>';
 ex.forEach((e,ei)=>{const tr=trendOf(ei),wk=e.sets.filter(s=>s.type==='рабочий').length,cl=!!S.closed[e.name];
 h+='<div class="card'+(cl?' closed':'')+'" data-card="'+ei+'" style="--gc:'+(GC[e.g]||'#b2d556')+'">'+
@@ -1010,7 +1087,7 @@ h+='<div class="set'+(s.type==='разминка'?' warm':'')+'" data-ei="'+ei+'
 '<input class="inp" type="text" inputmode="numeric" data-e="'+ei+'" data-s="'+si+'" data-f="r" value="'+esc(x.r==null?'':x.r)+'" placeholder="повт"></div>'});
 h+='</div><div class="card-f"><span class="mini">'+(pd?'прошлая '+fs(pd):'первая запись')+'</span><button class="btn btn-plan" data-plan="'+ei+'">⚡ По максимуму</button></div></div>'});
 h+='<div style="text-align:center;font-size:10px;color:var(--txt4);padding:6px 0 2px;font-family:var(--mono)">База: отдых 2–3 мин до пульса ниже 130 · изоляция 90 сек</div>';
-c.innerHTML=h;ex.forEach((e,ei)=>paintEx(ei));paintMeters()}
+c.innerHTML=h;ex.forEach((e,ei)=>paintEx(ei));paintMeters();layout()}
 function paintSet(ei,si,row){const k=S.date,res=resolve(k),r=S.log[k];if(!res.day||!row)return;
 const set=S.plan[res.day][ei].sets[si],x=r&&r.sets[ei+'_'+si]||{},iw=row.querySelector('[data-f="w"]'),ir=row.querySelector('[data-f="r"]');
 if(iw&&document.activeElement!==iw)iw.value=x.w==null?'':x.w;
@@ -1240,8 +1317,7 @@ if(per.length){body+='<div class="sect-t">Объём по упражнениям
 per.slice(0,8).forEach((p,i)=>{body+='<div class="rk"><span class="nm">'+esc(p.n)+'</span><span class="rb"><i style="width:'+(p.v/mx*100).toFixed(1)+'%;background:'+HUES[i%8]+'"></i></span><span class="vv">'+nf(p.v)+'</span></div>'});body+='</div>'}
 body+='<div class="fmt" style="margin-top:14px;margin-bottom:0">Скачай Excel и пришли в чат вместе с фото часов — я пересчитаю прогрессию и верну блок ⇩ с новыми весами.</div>';
 openSheet('Итоги тренировки',fs(k)+' · День '+day+' — '+DAY_NAMES[day],body,'<button class="btn btn-danger" data-del="1" style="flex:0 0 56px">🗑</button><button class="btn" data-close="1">Закрыть</button><button class="btn btn-lime" data-export="1">Excel</button>')}
-function openHistory(){
-const f=S.hist;let ks=Object.keys(S.log).filter(k=>hasData(S.log[k]));
+function openHistory(){const f=S.hist;let ks=Object.keys(S.log).filter(k=>hasData(S.log[k]));
 if(f.day)ks=ks.filter(k=>S.log[k].day===f.day);
 const q=(f.q||'').toLowerCase();
 if(q)ks=ks.filter(k=>fd(k).indexOf(q)>=0||(S.plan[S.log[k].day]||[]).some(e=>e.name.toLowerCase().indexOf(q)>=0));
@@ -1259,7 +1335,7 @@ $('hsort').onchange=e=>{S.hist.sort=e.target.value;save();openHistory()};
 $('sheetBody').onclick=e=>{
 const d=e.target.closest('[data-hd]');if(d){S.hist.day=+d.dataset.hd;save();return openHistory()}
 const s=e.target.closest('[data-hsel]');if(s){const k=s.dataset.hsel,i=S.histSel.indexOf(k);i>=0?S.histSel.splice(i,1):S.histSel.push(k);return openHistory()}
-if(e.target.closest('[data-bulkpark]')){const s=snap(),n=S.histSel.length;S.histSel.forEach(parkSession);S.histSel=[];save();renderAll();openHistory();
+if(e.target.closest('[data-bulkpark]')){const n=S.histSel.length;S.histSel.forEach(parkSession);S.histSel=[];save();renderAll();openHistory();
 return toast('Отложено тренировок: '+n,true,{label:'Вернуть',fn:undo})}
 const o=e.target.closest('[data-hopen]');if(o){closeSheet();go(o.dataset.hopen);setTimeout(openSummary,220)}}}
 function exHistory(ei){const res=resolve(S.date);if(!res.day)return;const e=S.plan[res.day][ei];
@@ -1279,7 +1355,7 @@ openSheet(e.name,'День '+res.day+' · история упражнения',b
 function openData(){const keys=[...new Set([...Object.keys(S.log),...Object.keys(S.parked).map(x=>x.split('|')[0])])].sort().reverse();
 let body='<div class="fmt">Записанная тренировка важнее ручного назначения. Смена дня откладывает запись, а не удаляет. «Эталон» возвращает данные из Excel для даты, где они потеряны.</div><div class="sect-t">Все даты · '+keys.length+'</div>';
 keys.forEach(k=>{const r=S.log[k],lg=hasData(r),pkd=parkedOf(k),sd=SEED[k]?SEED[k].day:null,need=sd&&(!lg||r.day!==sd);
-body+='<div class="drow"><span class="dt">'+fs(k)+'</span><span class="dd">'+(lg?'<b>День '+r.day+'</b> · '+filledCount(r)+' подх · '+nf(volOf(k))+' кг':'нет активной записи')+(pkd.length?'<br>отложено: '+pkd.map(p=>'Д'+p.day+' ('+filledCount(p.rec)+')').join(', '):'')+'</span>'+(lg&&!need?'<span class="st ok">ок</span>':need?'<button data-ref="'+k+'">Эталон</button>':pkd.length?'<button data-restore-on="'+k+'|'+pkd[0].day+'">Вернуть</button>':'<span class="st pk">пусто</span>')+'</div>'});
+body+='<div class="drow"><span class="dt">'+fs(k)+'</span><span class="dd">'+(lg?'<b>День '+r.day+'</b> · '+filledCount(r)+' подх · '+nf(volOf(k))+' кг':'нет активной записи')+(pkd.length?'<br>отложено: '+pkd.map(p=>'Д'+p.day+' ('+filledCount(p.rec)+')').join(', '):'')+'</span>'+(lg&&!need?'<span class="st ok">ок</span>':need?'<button data-ref="'+k+'">Эталон</button>':pkd.length?'<button data-restore="'+pkd[0].day+'">Вернуть</button>':'<span class="st pk">пусто</span>')+'</div>'});
 body+='<div class="sect-t">Перенос на другое устройство</div><textarea class="ta" id="jsonTa" style="min-height:120px;font-family:var(--mono);font-size:10.5px" placeholder="Вставь JSON и нажми «JSON»"></textarea>';
 openSheet('Данные и целостность',keys.length+' дат · '+Object.keys(S.parked).length+' отложенных',body,'<button class="btn" id="jsonCopy">Копировать</button><button class="btn" id="jsonLoad">JSON</button><button class="btn btn-lime" data-repair="1">Починить</button>');
 $('jsonCopy').onclick=()=>{const t=JSON.stringify(S);$('jsonTa').value=t;
@@ -1318,6 +1394,80 @@ ta.addEventListener('input',upd);upd();
 btn.onclick=()=>{if(!planPreview||!planPreview.changes.length)return toast('Нет изменений',true);
 const s=snap();planPreview.changes.forEach(c=>{S.plan[c.day][c.ei].sets[c.si].planW=c.newW;S.plan[c.day][c.ei].sets[c.si].planR=c.newR});
 S.planDate=fs(today());pushUndo(s);save();closeSheet();renderAll();beep('ok');toast('План обновлён · '+planPreview.changes.length+' подходов')}}
+/* ═══ панель мелодии и экрана ═══ */
+const cv=$('melCanvas'),cx=cv?cv.getContext('2d'):null;
+const NN=['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'];
+function noteName(semi){const M=MEL[C.mel]||MEL.bell,midi=Math.round(69+12*Math.log2(freq(M.base,semi)/440));return NN[((midi%12)+12)%12]+(Math.floor(midi/12)-1)}
+function sizeCanvas(){if(!cv||!cx)return;const r=cv.getBoundingClientRect(),dpr=Math.min(window.devicePixelRatio||1,2);
+cv.width=Math.max(1,Math.round(r.width*dpr));cv.height=Math.max(1,Math.round(96*dpr));cx.setTransform(dpr,0,0,dpr,0,0)}
+function drawStage(){if(!cx)return;const r=cv.getBoundingClientRect(),W=r.width,H=96;
+cx.clearRect(0,0,W,H);
+const M=MEL[C.mel]||MEL.bell,n=M.notes.length,gap=C.gap/1000,dec=C.dec/10,span=Math.max(.6,n*gap+dec*.55),pad2=8,inner=W-pad2*2;
+const lo=Math.min.apply(null,M.notes),hi=Math.max.apply(null,M.notes),rng=Math.max(6,hi-lo);
+cx.strokeStyle='#1b2126';cx.lineWidth=1;
+for(let g=0;g<4;g++){const y=12+g*((H-30)/3);cx.beginPath();cx.moveTo(pad2,y);cx.lineTo(W-pad2,y);cx.stroke()}
+const now=playStart?performance.now()-playStart:-1;
+for(let i=0;i<n;i++){const t=i*gap,x=pad2+(t/span)*inner,w=Math.max(10,(dec*.62/span)*inner),h=10+((M.notes[i]-lo)/rng)*(H-42),y=H-16-h,col=HUES[i%HUES.length];
+const passed=now>=0&&now>=t*1000;cx.globalAlpha=now<0?.85:(passed?1:.32);
+const grd=cx.createLinearGradient(x,y,x,y+h);grd.addColorStop(0,col);grd.addColorStop(1,'rgba(20,26,30,.35)');cx.fillStyle=grd;
+cx.beginPath();if(cx.roundRect)cx.roundRect(x,y,Math.min(w,W-pad2-x),h,6);else cx.rect(x,y,Math.min(w,W-pad2-x),h);cx.fill();
+if(passed&&now-t*1000<260){cx.globalAlpha=.5;cx.fillStyle=col;cx.beginPath();cx.arc(x+3,y,7,0,Math.PI*2);cx.fill()}
+cx.globalAlpha=1;cx.fillStyle=passed?'#e2e7ea':'#69737a';cx.font='700 9px ui-monospace, Menlo, monospace';cx.fillText(noteName(M.notes[i]+C.key),x,H-4)}
+if(now>=0&&now<playDur){const px=pad2+((now/1000)/span)*inner;
+if(px<W-pad2){cx.strokeStyle='rgba(226,231,234,.55)';cx.lineWidth=1.5;cx.beginPath();cx.moveTo(px,6);cx.lineTo(px,H-14);cx.stroke()}
+stageRaf=requestAnimationFrame(drawStage)}else{cancelAnimationFrame(stageRaf);stageRaf=0;playStart=0}}
+function slp(i){const e=el$(i);if(!e)return;const mn=+e.min,mx=+e.max;e.style.setProperty('--p',((e.value-mn)/(mx-mn)*100)+'%')}
+function paintMel(){const M=MEL[C.mel]||MEL.bell,T=TONE[C.tone]||TONE.glass;
+$('mVol').value=C.vol;$('mGap').value=C.gap;$('mKey').value=C.key;$('mDec').value=C.dec;$('mRev').value=C.rev;$('mShim').value=C.shim;
+['mVol','mGap','mKey','mDec','mRev','mShim'].forEach(slp);
+$('vVol').textContent=C.vol+'%';$('vGap').textContent=C.gap+' мс';$('vKey').textContent=(C.key>0?'+':'')+C.key;
+$('vDec').textContent=(C.dec/10).toFixed(1)+' с';$('vRev').textContent=C.rev+'%';$('vShim').textContent=C.shim+'%';
+$('vRep').textContent=C.rep;$('mRepVal').textContent=C.rep;$('vMel').textContent=M.name;$('vTone').textContent=T.name;
+$('melName').textContent=M.name+' · '+T.name;
+$('melMeta').textContent=M.notes.length+' нот · '+((M.notes.length*C.gap/1000+C.dec/10)*C.rep).toFixed(1)+' с';
+[].forEach.call($('segMel').children,b=>b.classList.toggle('on',b.dataset.m===C.mel));
+[].forEach.call($('segTone').children,b=>b.classList.toggle('on',b.dataset.t===C.tone));
+$('mVib').classList.toggle('on',!!C.vib);$('mGlow').classList.toggle('on',!!C.glow);$('mTick').classList.toggle('on',!!C.tick);
+$('melSub').textContent=S.sound?(M.name+' · '+C.vol+'% · '+C.rep+'×'):'звук выключен кнопкой 🔔';
+let lg='';for(let i=0;i<M.notes.length;i++)lg+='<span><i style="background:'+HUES[i%HUES.length]+'"></i>'+noteName(M.notes[i]+C.key)+'</span>';
+$('melLegend').innerHTML=lg;drawStage()}
+function paintScreen(){$('mTop').value=L.top;$('mBot').value=L.bot;$('mCard').value=L.card;$('mRad').value=L.rad;$('mSide').value=L.side;
+['mTop','mBot','mCard','mRad','mSide'].forEach(slp);
+$('vTop').textContent=L.top+' px';$('vBot').textContent=L.bot+' px';$('vCard').textContent=L.card+' px';$('vRad').textContent=L.rad+' px';$('vSide').textContent=L.side+' px';
+$('vDens').textContent=L.dens==='tight'?'Компактно':L.dens==='airy'?'Свободно':L.dens==='custom'?'Своё':'Обычно';
+[].forEach.call($('segDens').children,b=>b.classList.toggle('on',b.dataset.d===L.dens));
+$('mClean').classList.toggle('on',!!L.clean);$('mCal').classList.toggle('on',document.body.classList.contains('cal-collapsed'))}
+let pvT=0;function preview(force){const n=Date.now();if(!force&&n-pvT<230)return;pvT=n;playMelody()}
+function melOpen(){$('melScrim').classList.add('show');$('melPanel').classList.add('show');awake();sizeCanvas();paintMel();paintScreen();layout()}
+function melClose(){$('melScrim').classList.remove('show');$('melPanel').classList.remove('show')}
+$('melX').onclick=melClose;$('melDone').onclick=melClose;$('melScrim').onclick=melClose;
+$('btnMel').onclick=melOpen;$('rtMel').onclick=melOpen;
+$('melTest').onclick=()=>{awake();preview(true)};
+$('melReset').onclick=()=>{if($('mvSound').classList.contains('on')){C=Object.assign({},MEL_DEF);cStore();paintMel();preview(true)}
+else{L=Object.assign({},LAY_DEF);lStore();layout();paintScreen()}};
+document.querySelector('.mel-tabs').onclick=e=>{const b=e.target.closest('[data-mtab]');if(!b)return;const t=b.dataset.mtab;
+[].forEach.call(document.querySelectorAll('.mel-tabs button'),x=>x.classList.toggle('on',x===b));
+$('mvSound').classList.toggle('on',t==='sound');$('mvScreen').classList.toggle('on',t==='screen');
+if(t==='sound'){sizeCanvas();paintMel()}else{layout();paintScreen()}};
+$('segMel').onclick=e=>{const b=e.target.closest('[data-m]');if(!b)return;const M=MEL[b.dataset.m];
+C.mel=b.dataset.m;C.gap=M.gap;C.dec=M.dec;C.shim=M.shim;cStore();paintMel();preview(true)};
+$('segTone').onclick=e=>{const b=e.target.closest('[data-t]');if(!b)return;C.tone=b.dataset.t;cStore();paintMel();preview(true)};
+[['mVol','vol'],['mGap','gap'],['mKey','key'],['mDec','dec'],['mRev','rev'],['mShim','shim']].forEach(p=>{
+el$(p[0]).addEventListener('input',e=>{C[p[1]]=+e.target.value;cStore();paintMel();preview()})});
+$('mRepMinus').onclick=()=>{C.rep=clamp(C.rep-1,1,3);cStore();paintMel();preview(true)};
+$('mRepPlus').onclick=()=>{C.rep=clamp(C.rep+1,1,3);cStore();paintMel();preview(true)};
+$('mVib').onclick=()=>{C.vib=!C.vib;cStore();paintMel();if(C.vib)buzz([14,70,14])};
+$('mGlow').onclick=()=>{C.glow=!C.glow;cStore();paintMel();if(C.glow)glow(420)};
+$('mTick').onclick=()=>{C.tick=!C.tick;cStore();paintMel();if(C.tick)playTick()};
+$('segDens').onclick=e=>{const b=e.target.closest('[data-d]');if(!b)return;applyDens(b.dataset.d);lStore();layout();paintScreen()};
+[['mTop','top'],['mBot','bot'],['mCard','card'],['mRad','rad'],['mSide','side']].forEach(p=>{
+el$(p[0]).addEventListener('input',e=>{L[p[1]]=+e.target.value;L.dens='custom';lStore();layout();paintScreen()})});
+$('mClean').onclick=()=>{L.clean=!L.clean;lStore();layout();paintScreen()};
+$('mCal').onclick=()=>{S.collapsed=!S.collapsed;save();renderHeader();setTimeout(()=>{layout();paintScreen()},80)};
+(function(){const g=$('melGrab'),p=$('melPanel');let sy=0,dy=0,on=false;
+g.addEventListener('pointerdown',e=>{on=true;sy=e.clientY;dy=0;p.style.transition='none'});
+window.addEventListener('pointermove',e=>{if(!on)return;dy=Math.max(0,e.clientY-sy);p.style.transform='translateY('+dy+'px)'});
+window.addEventListener('pointerup',()=>{if(!on)return;on=false;p.style.transition='';p.style.transform='';if(dy>90)melClose()})})();
 /* ═══ Excel ═══ */
 const BD={style:'thin',color:{rgb:'B4B4B4'}},BH={style:'medium',color:{rgb:'5A5A5A'}};
 const BR={top:BD,bottom:BD,left:BD,right:BD},BRH={top:BH,bottom:BH,left:BH,right:BH};
@@ -1530,10 +1680,10 @@ toast('Excel загружен · '+cnt+' подходов · часы '+wn+' · 
 catch(err){toast('Ошибка: '+(err&&err.message?err.message:err),true);beep('err')}};
 fr.readAsArrayBuffer(file)}
 /* ═══ события ═══ */
-$('btnSound').onclick=()=>{S.sound=!S.sound;save();renderHeader();rtPaint();sndPaint();if(S.sound){beep('ok');buzz(20)}toast(S.sound?'Звук и вибрация включены':'Звук выключен',!S.sound)};
+$('btnSound').onclick=()=>{S.sound=!S.sound;save();renderHeader();rtPaint();paintMel();if(S.sound){beep('ok');buzz(20)}toast(S.sound?'Звук и вибрация включены':'Звук выключен',!S.sound)};
 $('btnWake').onclick=async()=>{if(!('wakeLock' in navigator))return toast('Браузер не поддерживает удержание экрана',true);
 if(wakeOn){relWake();S.wake=false;save();toast('Экран может гаснуть',true)}else{S.wake=true;save();await reqWake();toast(wakeOn?'Экран не гаснет':'Не удалось удержать экран',!wakeOn)}};
-$('btnCal').onclick=()=>{S.collapsed=!S.collapsed;save();renderHeader();measureHdr();if(!S.collapsed)setTimeout(()=>scrollCal(true),60)};
+$('btnCal').onclick=()=>{S.collapsed=!S.collapsed;save();renderHeader();setTimeout(()=>{layout();paintScreen()},80);if(!S.collapsed)setTimeout(()=>scrollCal(true),60)};
 $('btnImport').onclick=()=>$('fileInput').click();
 $('fileInput').onchange=e=>{const f=e.target.files&&e.target.files[0];if(f)importXLSX(f);e.target.value=''};
 $('btnExport').onclick=exportXLSX;$('btnPlan').onclick=toggleDay;$('btnFinish').onclick=finish;
@@ -1550,13 +1700,13 @@ if(e.target.closest('[data-applynext]'))return applyNext();
 if(e.target.closest('[data-planimport]')){closeSheet();return openPlanImport()}
 if(e.target.closest('[data-repair]')){const s=snap();lastRepair=seedAndRepair();
 if(lastRepair.length){pushUndo(s);save();renderAll();toast('Починено записей: '+lastRepair.length,true)}else toast('Все записи на месте');closeSheet();return openData()}};
-const scrollEl=$('scroll');
 scrollEl.addEventListener('pointerdown',e=>{const g=e.target.closest('[data-grip]');if(g)startDrag(e,+g.dataset.grip)});
 scrollEl.addEventListener('click',e=>{if(drag)return;
 const rs=e.target.closest('[data-restore]');if(rs)return restoreParked(+rs.dataset.restore);
 const g=e.target.closest('[data-go]');if(g)return go(g.dataset.go);
 if(e.target.closest('[data-coach]'))return openCoach();
 if(e.target.closest('[data-data]'))return openData();
+if(e.target.closest('[data-history]'))return openHistory();
 if(e.target.closest('[data-planimport]'))return openPlanImport();
 const ck=e.target.closest('[data-check]');
 if(ck){const id=ck.dataset.check;S.restChecks[S.date]=S.restChecks[S.date]||{};S.restChecks[S.date][id]=!S.restChecks[S.date][id];save();renderBody();buzz(10);return}
@@ -1574,7 +1724,7 @@ f[id]=f[id]===v?undefined:v;if(!f.sleep&&!f.fatigue&&!f.joints&&!f.note)delete S
 pushUndo(s);save();renderHeader();renderBody();paintMeters();buzz(10);return}
 const fold=e.target.closest('[data-fold]');
 if(fold){const ei=+fold.dataset.fold,res=resolve(S.date),nm=S.plan[res.day][ei].name;S.closed[nm]=!S.closed[nm];save();
-const card=document.querySelector('[data-card="'+ei+'"]');if(card)card.classList.toggle('closed',!!S.closed[nm]);return}
+const card=document.querySelector('[data-card="'+ei+'"]');if(card)card.classList.toggle('closed',!!S.closed[nm]);layout();return}
 if(e.target.closest('[data-grip]'))return;
 const h=e.target.closest('[data-hist]');if(h)return exHistory(+h.dataset.hist);
 const p=e.target.closest('[data-plan]');if(p)return toggleEx(+p.dataset.plan)});
@@ -1588,9 +1738,8 @@ if(i.id==='feelNote'){const f=S.feel[S.date]||(S.feel[S.date]={});f.note=i.value
 scrollEl.addEventListener('change',e=>{if(e.target.classList.contains('inp')){paintCal();renderHeader()}});
 scrollEl.addEventListener('focusin',e=>{if(e.target.classList.contains('inp'))e.target.select()});
 document.addEventListener('keydown',e=>{
-if(e.key==='Escape'){if($('sndPanel').classList.contains('show'))return sndClose();if($('rtOverlay').classList.contains('show'))return rtClose();closeSheet()}
+if(e.key==='Escape'){if($('melPanel').classList.contains('show'))return melClose();if($('rtOverlay').classList.contains('show'))return rtClose();closeSheet()}
 if(e.code==='Space'&&$('rtOverlay').classList.contains('show')){e.preventDefault();RT.mode==='running'?rtPause():rtResume()}});
-window.addEventListener('resize',()=>{measureHdr();if(!S.collapsed)scrollCal(false)});
 document.addEventListener('pointerdown',function once(){awake();if(S.wake)reqWake();document.removeEventListener('pointerdown',once)},{once:true});
 /* ═══ иконка ═══ */
 (function(){try{const c=document.createElement('canvas');c.width=180;c.height=180,x=c.getContext('2d');
@@ -1605,22 +1754,17 @@ load();lastRepair=seedAndRepair();
 if(!S.date)S.date=Object.keys(SEED).sort().pop();
 if(S.date>CAL_END)S.date=CAL_END;if(S.date<calStart())S.date=calStart();
 if(!S.tab)S.tab='work';
-rtLoad();save();renderAll();sndPaint();rtPaint();
-requestAnimationFrame(()=>{measureHdr();scrollCal(false);updateCalMonth()});
+rtLoad();save();renderAll();sizeCanvas();paintMel();paintScreen();rtPaint();
+requestAnimationFrame(()=>{layout();scrollCal(false);updateCalMonth();sizeCanvas();drawStage()});
 if(RT.mode==='running'){rtLoop();rtSession()}
 if(S.wake)reqWake();
+setTimeout(layout,300);setTimeout(layout,900);
 setInterval(()=>{if(RT.mode==='running'&&document.visibilityState==='visible')rtMeta()},4000);
-/* кнопка «История» в шторке данных */
-$('btnSnd').addEventListener('longpress',openHistory);
 if(lastRepair.length){const r=lastRepair.find(x=>x.k==='2026-11-23')||lastRepair[0];
 setTimeout(()=>toast('Восстановлено: '+fs(r.k)+' · День '+r.day+', '+r.n+' подходов'+(lastRepair.length>1?' (+'+(lastRepair.length-1)+' даты)':''),true),500)}
 else setTimeout(()=>{const res=resolve(S.date),c=countSets(S.date);
 if(res.day&&hasData(S.log[S.date]))toast(fs(S.date)+' · День '+res.day+': '+c.done+'/'+c.total+' подходов, '+nf(volOf(S.date))+' кг');
 else if(res.day)toast('Сегодня День '+res.day+' — '+DAY_NAMES[res.day]+', план готов')},700);
-/* история доступна из строки сессии */
-document.addEventListener('click',e=>{const b=e.target.closest('[data-history]');if(b)openHistory()});
-(function(){const line=document.querySelector('.sess-line');if(line&&!line.querySelector('[data-history]')){
-const b=document.createElement('button');b.className='ic cy';b.dataset.history='1';b.textContent='🕘';b.title='История';line.appendChild(b)}})();
 </script>
 </body>
 </html>
