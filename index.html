@@ -1,15 +1,18 @@
 <!DOCTYPE html>
 <!--═══════════════════════════════════════════════════════════════════════════════
- ДНЕВНИК ТРЕНИРОВОК · PWA · v18
- Полный файл index.html. Заменяет предыдущую версию целиком.
- • localStorage['gymDiary.v11'] — данные устройства подхватываются как есть
- • 📥 «Внести всё» — один текстовый блок от тренера раскладывает по местам
-   факты, часы, самочувствие, вес, InBody, план весов и разбор автоматически
- • Таймер отдыха: крупные цифры по центру, счёт по абсолютному времени,
-   аудио-сессия + MediaSession → «Сейчас играет» на локскрине и в Dynamic Island
- • Мелодия окончания отдыха: 6 мелодий × 4 тембра, реверберация, живой предпросмотр
- • Плановые веса — яркие жирные табличные цифры с лаймовой линейкой цели
- • Excel: 12 листов со стилями, лист «Разбор» читается при загрузке
+ ДНЕВНИК ТРЕНИРОВОК · PWA · v19
+ Что изменено против v18:
+ 1. УБРАН аудио-элемент и весь MediaSession. Приложение больше не занимает
+    аудиосессию iPhone → музыка в наушниках НЕ останавливается, а остаток отдыха
+    НЕ появляется в Dynamic Island и в «Сейчас играет» на локскрине.
+ 2. Таймер живёт только на абсолютной метке времени endAt + localStorage:
+    свернул, заблокировал, вернулся — остаток пересчитывается по часам устройства.
+ 3. Звук конца отдыха идёт через WebAudio с navigator.audioSession.type='ambient'
+    (микс поверх музыки). Переключатель режима — в панели ♪.
+ 4. Иконка приложения — ГАНТЕЛЬ. Генерируется в canvas, есть предпросмотр
+    и скачивание PNG в шторке 🗂 «Данные».
+ Остальное сохранено: 📥 единый блок тренера, мелодия, плотные отступы,
+ читаемые плановые веса, календарь до 2027, Excel на 12 листов.
 ═══════════════════════════════════════════════════════════════════════════════-->
 <html lang="ru">
 <head>
@@ -21,7 +24,9 @@
 <meta name="apple-mobile-web-app-title" content="Дневник">
 <meta name="theme-color" content="#08090b">
 <title>Дневник тренировок</title>
-<link id="touchIcon" rel="apple-touch-icon" href="">
+<link id="touchIcon" rel="apple-touch-icon" sizes="180x180" href="">
+<link id="favIcon" rel="icon" type="image/png" href="">
+<link id="manifestLink" rel="manifest" href="">
 <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 <style>
 :root{
@@ -57,7 +62,7 @@ body::after{content:"";position:fixed;inset:0;z-index:1;pointer-events:none;opac
 .hdr{position:fixed;top:0;left:0;right:0;z-index:40;background:linear-gradient(180deg,rgba(8,9,11,.99),rgba(8,9,11,.93));backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-bottom:1px solid var(--line);padding-top:env(safe-area-inset-top)}
 .hdr-main{display:flex;align-items:center;gap:6px;padding:9px 12px 7px}
 .mark{width:31px;height:31px;flex:none;border-radius:10px;display:grid;place-items:center;background:linear-gradient(140deg,var(--lime),#8fc63c 58%,var(--cyan));box-shadow:0 4px 14px -7px rgba(178,213,86,.8)}
-.mark svg{width:18px;height:18px;stroke:#08090b;fill:none;stroke-width:2.2;stroke-linecap:round}
+.mark svg{width:19px;height:19px;stroke:#08090b;fill:none;stroke-width:2;stroke-linecap:round}
 .hdate{flex:1;min-width:0}
 .hdate .d{font-family:var(--mono);font-size:16.5px;font-weight:700;letter-spacing:.3px;line-height:1.15}
 .hdate .w{font-size:10px;color:var(--txt3);display:flex;align-items:center;gap:6px;margin-top:1px;white-space:nowrap;overflow:hidden}
@@ -340,6 +345,12 @@ body.cal-collapsed .cal-wrap{display:none}
 .spark{background:var(--surf);border:1px solid var(--line);border-radius:13px;padding:12px;margin-bottom:12px}
 .spark svg{width:100%;height:82px;overflow:visible}
 .empty{text-align:center;padding:36px 20px;color:var(--txt3);font-size:12.5px}
+.ico-card{display:flex;align-items:center;gap:13px;background:linear-gradient(150deg,#19211a,#111519);border:1px solid var(--limeB);border-radius:14px;padding:12px;margin-bottom:11px}
+.ico-card canvas{width:76px;height:76px;flex:none;border-radius:18px;box-shadow:0 8px 22px -10px rgba(178,213,86,.6)}
+.ico-card .tx{flex:1;min-width:0}
+.ico-card .tx b{display:block;font-size:12.5px;font-weight:750;color:var(--lime2)}
+.ico-card .tx span{display:block;font-size:10px;color:var(--txt3);line-height:1.45;margin-top:3px}
+.ico-card .btn{flex:none;height:36px}
 .toast{position:fixed;left:12px;right:12px;bottom:calc(var(--dock) + 14px);z-index:150;max-width:696px;margin:0 auto;background:linear-gradient(140deg,#1f2a1c,#171e17);border:1px solid var(--limeB);border-radius:12px;padding:10px 12px;font-size:12px;font-weight:650;display:flex;align-items:center;gap:9px;box-shadow:0 14px 32px -16px #000;opacity:0;transform:translateY(10px);pointer-events:none;transition:.25s}
 .toast.show{opacity:1;transform:none;pointer-events:auto}
 .toast.warn{background:linear-gradient(140deg,#2b2318,#1f1a14);border-color:var(--amberB)}
@@ -452,6 +463,7 @@ input[type=range].msl::-moz-range-track{height:6px;border-radius:4px;background:
 input[type=range].msl::-moz-range-progress{height:6px;border-radius:4px;background:var(--lime)}
 input[type=range].msl::-moz-range-thumb{width:20px;height:20px;border-radius:50%;background:#0d1114;border:2px solid var(--lime);cursor:pointer}
 .seg{display:grid;gap:6px}
+.seg.c2{grid-template-columns:repeat(2,1fr)}
 .seg.c3{grid-template-columns:repeat(3,1fr)}
 .seg.c4{grid-template-columns:repeat(4,1fr)}
 .seg button{height:38px;border-radius:10px;border:1px solid var(--line2);background:#191d21;color:var(--txt3);font-size:11px;font-weight:700;font-family:var(--sans);cursor:pointer;padding:0 4px;line-height:1.15}
@@ -475,21 +487,20 @@ input[type=range].msl::-moz-range-thumb{width:20px;height:20px;border-radius:50%
 .set-plan .p{font-size:12.5px;letter-spacing:0}
 .set-plan .p em{font-size:7.5px;margin-left:4px}
 .rt-pre{height:40px;font-size:12.5px}.rt-btn{height:46px;font-size:12px}.rt-time{font-size:clamp(50px,19vw,84px)}.rt-ring{width:min(84vw,280px)}
-.seg.c4{grid-template-columns:repeat(2,1fr)}.step button{width:38px}.diag,.imp-grid{grid-template-columns:repeat(2,1fr)}}
+.seg.c4{grid-template-columns:repeat(2,1fr)}.step button{width:38px}.diag,.imp-grid{grid-template-columns:repeat(2,1fr)}
+.ico-card{flex-wrap:wrap}.ico-card .btn{flex:1}}
 @media (min-width:760px){
 .hdr-main,.cal,.tabs,.chips,.dock-row,.prog{padding-left:max(14px,calc((100vw - 720px)/2));padding-right:max(14px,calc((100vw - 720px)/2))}
 .rt-ring{width:min(48vh,360px)}
 .set-plan .p{font-size:14px}}
-@media (prefers-contrast:more){
-.set-plan .p{color:#FFF;text-shadow:none}
-.pv{color:#6B767D}}
+@media (prefers-contrast:more){.set-plan .p{color:#FFF;text-shadow:none}.pv{color:#6B767D}}
 @media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
 </style>
 </head>
 <body>
 <header class="hdr">
   <div class="hdr-main">
-    <div class="mark"><svg viewBox="0 0 24 24"><path d="M4 9v6M7 7v10M17 7v10M20 9v6M7 12h10"/></svg></div>
+    <div class="mark"><svg viewBox="0 0 24 24"><path d="M3 10v4M6 7.5v9M18 7.5v9M21 10v4M6 12h12"/></svg></div>
     <div class="hdate"><div class="d" id="dateText">—</div><div class="w"><span id="weekText">—</span><span class="badge auto" id="srcBadge">авто</span><span id="planLabel"></span></div></div>
     <button class="ib hot" id="btnPaste" aria-label="Внести всё">📥</button>
     <button class="ib on" id="btnSound" aria-label="Звук"><svg viewBox="0 0 24 24"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M16 9a4 4 0 0 1 0 6"/></svg></button>
@@ -545,11 +556,10 @@ input[type=range].msl::-moz-range-thumb{width:20px;height:20px;border-radius:50%
     <div class="rt-row"><button class="rt-btn plus" id="rtMinus">−30</button><button class="rt-btn main" id="rtMain"><svg viewBox="0 0 24 24" id="rtMainIcon"><path d="M7 4l12 8-12 8z"/></svg><span id="rtMainTxt">Старт</span></button><button class="rt-btn plus" id="rtPlus">+30</button></div>
     <div class="rt-row"><button class="rt-btn stop" id="rtStop"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>Сбросить и закрыть</button></div>
     <div class="tog on" id="rtAuto"><div class="t"><b>Автозапуск после подхода</b><span>заполнил вес и повторы — отдых пошёл сам</span></div><div class="sw"></div></div>
-    <div class="rt-note"><span>ⓘ</span><span><b>Фон и Dynamic Island.</b> Счёт по часам устройства — при сворачивании не теряется. Остаток виден в «Сейчас играет» на локскрине и в островке. Нативные Live Activities веб-приложению недоступны, поэтому работает аудио-сессия.</span></div>
+    <div class="rt-note"><span>🎧</span><span><b>Музыка не прерывается.</b> Приложение больше не занимает аудиосессию и не показывается в Dynamic Island. Отсчёт идёт по часам устройства: свернул или заблокировал экран — при возврате остаток пересчитается, а если отдых вышел, сигнал прозвучит сразу.</span></div>
   </div>
 </div>
 <div class="rt-mini" id="rtMini"><div><div class="ml" id="rtMiniLabel">отдых</div><div class="mt" id="rtMiniTime">2:30</div></div><div class="mr" id="rtMiniBtn">⏸</div></div>
-<audio id="rtKeep" loop playsinline preload="auto"></audio>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -579,7 +589,7 @@ const DAY_FULL={1:'Низ: ноги',2:'Верх A: грудь, спина, пл
 const DAY_TIME={1:'90–97 мин',2:'80–85 мин',3:'около 93 мин'},DAY_WD={1:'понедельник',2:'среда',3:'пятница'};
 const GC={legs:'#b2d556',chest:'#5fc6e2',back:'#9d86e0',delts:'#dfae55',arms:'#63c68c'};
 const HUES=['#b2d556','#5fc6e2','#dfae55','#9d86e0','#63c68c','#dd7368','#c9bb9c','#dd9450'];
-const R=(a,b)=>a+'–'+b,KEY='gymDiary.v11',RTKEY='gymDiary.restTimer.v8',MELKEY='gymDiary.melody.v4',LAYKEY='gymDiary.layout.v4';
+const R=(a,b)=>a+'–'+b,KEY='gymDiary.v11',RTKEY='gymDiary.restTimer.v9',MELKEY='gymDiary.melody.v5',LAYKEY='gymDiary.layout.v4';
 const MOON='<svg viewBox="0 0 24 24"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg>';
 const W=(w,r)=>({type:'разминка',planW:w,planR:String(r)}),K=(w,r)=>({type:'рабочий',planW:w,planR:r});
 /* ═══ программа ═══ */
@@ -688,15 +698,16 @@ const DECISIONS=[
 {t:'Темп набора',v:'0,15–0,20 кг/нед',d:'Потолок снижен с 0,35: за 19 дней 0,9 кг жира против 0,1 кг мышц.'},
 {t:'Кардио',v:'2 × 20–30 мин',d:'Зона 2, пульс 110–128. Вторник и суббота.'},
 {t:'Шаги',v:'9–10 тыс./день',d:'Сейчас 6 тыс. 5 мин ходьбы каждый час.'},
-{t:'Силовые',v:'Без разгрузки',d:'Стресс 3,4, восстановление 17 ч, объём растёт.'},
+{t:'Вода',v:'3–3,5 л/сут',d:'Мочевина 7,8 и плотность мочи 1,030 — прямое показание.'},
 {t:'Контроль',v:'InBody 14–21.12',d:'Утром натощак до тренировки. Талия сантиметром раз в неделю.'}];
 const SUMMARY_SEED=[
 '23.11 (День 1): объём 24 254 кг (+11,7% к 16.11), 29/29 подходов, 97 мин по часам.',
 'Отдых до пульса ниже 130: присед 7→8, жим ногами 8→11. Выше анаэробного порога 25% против 44% (18.11).',
 'InBody 23.11: 100,6 кг, жир 16,4%, висцеральный 8. Из +1,0 кг — 0,1 кг мышц и 0,9 кг жира (90%).',
+'Анализы 23.11: ЛПНП 3,41 (было 4,23), ОХ 5,3 (было 5,86), Lp(a) 6,12 — низкий. Витамин D 30,0 — нижняя граница.',
 'План 25.11 (День 2): жим 90 / 92,5 / 92,5, гантели 45° 26 × 3, кроссовер 79 / 84.',
-'План 27.11 (День 3): армейский 40 / 40, брусья 147 / 138, махи сидя 20 / 18, Скотта 64 / 68.',
 'План 30.11 (День 1): румынская 45 / 55, икры 129 × 3.'];
+const PLAN_HIST={'2026-11-23':{day:1,ex:[['Приседание со штангой',[[20,12],[60,8],[80,5],[100,R(10,12)],[100,R(10,12)],[100,R(8,10)]]],['Румынская тяга',[[30,10],[40,R(8,12)],[50,R(8,12)]]]]}};
 /* ═══ состояние ═══ */
 let S={date:null,tab:'work',planDate:'23.11.2026',plan:JSON.parse(JSON.stringify(EXERCISES)),log:{},parked:{},touched:{},override:{},weights:{},watch:{},feel:{},cardio:{},inbody:JSON.parse(JSON.stringify(INBODY)),summary:SUMMARY_SEED.slice(),analyses:{},decisions:[],collapsed:false,closed:{},sound:true,wake:true,restChecks:{},coachTab:'work',hist:{q:'',day:0,sort:'date'},histSel:[],replacePaste:true};
 let undoStack=[],toastT=null,drag=null,wakeLock=null,wakeOn=false,lastRepair=[],pickYear=2026,impPreview=null;
@@ -750,7 +761,7 @@ return out}
 function trendOf(ei){const a=ANALYSIS[S.date],res=resolve(S.date);if(!a||!res.day)return null;const e=S.plan[res.day][ei];if(!e)return null;const it=a.items.find(i=>i.n===e.name||i.n===jn(e));return it?it.s:null}
 function findEx(day,name){const arr=S.plan[day]||[];const n=norm(ALIAS[name]||name);
 return arr.find(e=>norm(e.name)===n||norm(jn(e))===n)||arr.find(e=>norm(e.name).indexOf(n)>=0||n.indexOf(norm(e.name))>=0)||null}
-/* ═══ МЕЛОДИЯ ═══ */
+/* ═══ АУДИОСЕССИЯ: НЕ ТРОГАЕМ МУЗЫКУ ═══ */
 const MEL={bell:{name:'Колокольчик',base:1046.50,notes:[0,4,7,12],gap:130,dec:19,shim:55},
 marimba:{name:'Маримба',base:783.99,notes:[7,12,16,19],gap:110,dec:11,shim:32},
 kalimba:{name:'Калимба',base:659.25,notes:[4,9,12,16],gap:145,dec:15,shim:44},
@@ -761,13 +772,19 @@ const TONE={glass:{name:'Стекло',parts:[1,.46,.26,.13,.07],ratios:[1,2,3,4
 wood:{name:'Дерево',parts:[1,.34,.12,.05],ratios:[1,2,3,4],det:0,atk:.003,mallet:.34},
 metal:{name:'Металл',parts:[1,.52,.34,.22,.14,.08],ratios:[1,2.01,2.99,4.16,5.43,6.8],det:5,atk:.004,mallet:.16},
 soft:{name:'Мягкий',parts:[1,.22,.08],ratios:[1,2,3],det:0,atk:.020,mallet:.04}};
-const MEL_DEF={mel:'bell',tone:'glass',vol:72,gap:130,key:0,dec:19,rev:38,shim:55,rep:1,vib:true,glow:true,tick:true};
+const MEL_DEF={mel:'bell',tone:'glass',vol:72,gap:130,key:0,dec:19,rev:38,shim:55,rep:1,vib:true,glow:true,tick:true,mix:true};
 let C=Object.assign({},MEL_DEF);
 try{const q=JSON.parse(localStorage.getItem(MELKEY)||'null');if(q)C=Object.assign({},MEL_DEF,q)}catch(e){}
 function cStore(){try{localStorage.setItem(MELKEY,JSON.stringify(C))}catch(e){}}
 let AC=null,dry=null,wet=null,conv=null,master=null,comp=null,live=[],playStart=0,playDur=0,stageRaf=0;
+function sessionSupported(){return typeof navigator!=='undefined'&&'audioSession' in navigator}
+function applySession(){
+  if(!sessionSupported())return false;
+  try{navigator.audioSession.type=C.mix?'ambient':'transient';return true}catch(e){return false}
+}
 function actx(){if(AC)return AC;
 try{AC=new (window.AudioContext||window.webkitAudioContext)();
+applySession();
 master=AC.createGain();master.gain.value=1;
 comp=AC.createDynamicsCompressor();comp.threshold.setValueAtTime(-10,AC.currentTime);comp.knee.setValueAtTime(10,AC.currentTime);
 comp.ratio.setValueAtTime(4,AC.currentTime);comp.attack.setValueAtTime(.004,AC.currentTime);comp.release.setValueAtTime(.2,AC.currentTime);
@@ -777,7 +794,7 @@ const sec=2.4,len=Math.floor(AC.sampleRate*sec),b=AC.createBuffer(2,len,AC.sampl
 for(let ch=0;ch<2;ch++){const d=b.getChannelData(ch);for(let i=0;i<len;i++){const t=i/len;d[i]=(Math.random()*2-1)*Math.pow(1-t,2.6)*(1-t*.2)*(ch?.94:1)}}
 conv.buffer=b}catch(e){AC=null}
 return AC}
-function awake(){const c=actx();if(c&&c.state==='suspended')c.resume();return c}
+function awake(){applySession();const c=actx();if(c&&c.state==='suspended')c.resume();return c}
 function stopLive(){for(let i=0;i<live.length;i++){try{live[i].stop()}catch(e){}}live=[]}
 function freq(base,semi){return base*Math.pow(2,semi/12)}
 function voice(f,at,dur,g,tone,shim){const c=actx();if(!c)return;
@@ -822,7 +839,7 @@ o.connect(gn);gn.connect(dry);o.start(t);o.stop(t+.26);return}
 gn.gain.setValueAtTime(0,t+a[1]);gn.gain.linearRampToValueAtTime(g,t+a[1]+.01);gn.gain.exponentialRampToValueAtTime(.0005,t+a[1]+a[2]);
 o.connect(gn);gn.connect(dry);gn.connect(conv);o.start(t+a[1]);o.stop(t+a[1]+a[2]+.04)})}
 function askNotif(){try{if('Notification' in window&&Notification.permission==='default')Notification.requestPermission()}catch(e){}}
-function notifyRest(){try{if('Notification' in window&&Notification.permission==='granted')new Notification('Отдых закончен',{body:'Следующий подход',tag:'rest',renotify:true})}catch(e){}}
+function notifyRest(txt){try{if('Notification' in window&&Notification.permission==='granted')new Notification('Отдых закончен',{body:txt||'Следующий подход',tag:'rest',renotify:true})}catch(e){}}
 async function reqWake(){if(!S.wake||!('wakeLock' in navigator))return;
 try{wakeLock=await navigator.wakeLock.request('screen');wakeOn=true;
 wakeLock.addEventListener('release',()=>{wakeOn=false})}catch(e){wakeOn=false}}
@@ -861,45 +878,15 @@ if(window.MutationObserver){const mo=new MutationObserver(()=>layout());mo.obser
 window.addEventListener('resize',()=>{sizeCanvas();drawStage();layout()});
 window.addEventListener('orientationchange',()=>setTimeout(()=>{sizeCanvas();drawStage();layout()},220));
 setInterval(layout,1500);
-/* ═══ ТАЙМЕР ═══ */
-const RT={mode:'idle',preset:150,endAt:0,left:150,auto:true,notified:false,ctx:null,iv:null,art:'',mediaAt:0,lastTick:-1};
-const CIRC=2*Math.PI*88,baseTitle=document.title;
+/* ═══ ТАЙМЕР: БЕЗ АУДИОЭЛЕМЕНТА И БЕЗ MediaSession ═══ */
+const RT={mode:'idle',preset:150,endAt:0,left:150,auto:true,notified:false,ctx:null,iv:null,lastTick:-1};
+const CIRC=2*Math.PI*88;
 const fmtT=s=>{s=Math.max(0,Math.round(s));return Math.floor(s/60)+':'+pad(s%60)};
 function rtStore(){try{localStorage.setItem(RTKEY,JSON.stringify({m:RT.mode,p:RT.preset,e:RT.endAt,l:RT.left,a:RT.auto,c:RT.ctx}))}catch(e){}}
 function rtLoad(){try{const q=JSON.parse(localStorage.getItem(RTKEY)||'null');if(!q)return;RT.preset=q.p||150;RT.auto=q.a!==false;RT.ctx=q.c||null;
-if(q.m==='running'&&q.e){const l=Math.ceil((q.e-Date.now())/1000);if(l>0){RT.mode='running';RT.endAt=q.e;RT.left=l}else{RT.mode='done';RT.left=0;RT.endAt=q.e}}
-else if(q.m==='paused'&&q.l>0){RT.mode='paused';RT.left=q.l}}catch(e){}}
-function rtIcon(){if(RT.art)return RT.art;try{const c=document.createElement('canvas');c.width=512;c.height=512,x=c.getContext('2d');
-const g=x.createLinearGradient(0,0,512,512);g.addColorStop(0,'#c8f24e');g.addColorStop(.6,'#8fc63c');g.addColorStop(1,'#5fc6e2');
-x.fillStyle='#07080a';x.fillRect(0,0,512,512);x.fillStyle=g;
-if(x.roundRect){x.beginPath();x.roundRect(56,56,400,400,96);x.fill()}else x.fillRect(56,56,400,400);
-x.strokeStyle='#07080a';x.lineWidth=36;x.lineCap='round';x.beginPath();
-x.moveTo(150,214);x.lineTo(150,298);x.moveTo(200,178);x.lineTo(200,334);x.moveTo(312,178);x.lineTo(312,334);x.moveTo(362,214);x.lineTo(362,298);x.moveTo(200,256);x.lineTo(312,256);x.stroke();
-RT.art=c.toDataURL('image/png')}catch(e){RT.art=''}return RT.art}
-function rtWav(){const sr=8000,n=sr,b=new ArrayBuffer(44+n*2),v=new DataView(b);
-const s=(o,t)=>{for(let i=0;i<t.length;i++)v.setUint8(o+i,t.charCodeAt(i))};
-s(0,'RIFF');v.setUint32(4,36+n*2,true);s(8,'WAVE');s(12,'fmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);
-v.setUint32(24,sr,true);v.setUint32(28,sr*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);s(36,'data');v.setUint32(40,n*2,true);
-for(let i=0;i<n;i++)v.setInt16(44+i*2,0,true);
-const u=new Uint8Array(b);let str='';for(let j=0;j<u.length;j++)str+=String.fromCharCode(u[j]);
-return 'data:audio/wav;base64,'+btoa(str)}
-function rtSession(){const a=$('rtKeep');
-if(a){if(!a.src){a.src=rtWav();a.volume=.001}const p=a.play();if(p&&p.catch)p.catch(()=>{})}
-if('mediaSession' in navigator){try{
-navigator.mediaSession.setActionHandler('play',rtResume);navigator.mediaSession.setActionHandler('pause',rtPause);
-navigator.mediaSession.setActionHandler('stop',()=>rtStop(true));navigator.mediaSession.setActionHandler('seekforward',()=>rtAdd(30));
-navigator.mediaSession.setActionHandler('seekbackward',()=>rtAdd(-30));navigator.mediaSession.setActionHandler('nexttrack',()=>rtStart(RT.preset));
-navigator.mediaSession.setActionHandler('previoustrack',()=>rtStart(RT.preset))}catch(e){}rtMeta()}}
-function rtUnsess(){const a=$('rtKeep');try{if(a)a.pause()}catch(e){}
-if('mediaSession' in navigator){try{navigator.mediaSession.playbackState='none'}catch(e){}}document.title=baseTitle}
-function rtMeta(){if(!('mediaSession' in navigator))return;let t,ar;
-if(RT.mode==='done'){t='Отдых закончен';ar='Следующий подход'}
-else if(RT.mode==='paused'){t='Пауза · '+fmtT(RT.left);ar='Отдых между подходами'}
-else if(RT.mode==='running'){t='Отдых · '+fmtT(RT.left);ar=(RT.ctx&&RT.ctx.name?RT.ctx.name:'Дневник')+' · осталось'}else return;
-try{navigator.mediaSession.metadata=new MediaMetadata({title:t,artist:ar,album:'Таймер отдыха',artwork:rtIcon()?[{src:rtIcon(),sizes:'512x512',type:'image/png'}]:[]});
-navigator.mediaSession.playbackState=RT.mode==='running'?'playing':'paused';
-if(RT.mode==='running'&&navigator.mediaSession.setPositionState){const pos=Math.max(0,RT.preset-RT.left);
-if(RT.preset>0&&pos<=RT.preset)navigator.mediaSession.setPositionState({duration:RT.preset,playbackRate:1,position:pos})}}catch(e){}}
+if(q.m==='running'&&q.e){const l=Math.ceil((q.e-Date.now())/1000);if(l>0){RT.mode='running';RT.endAt=q.e;RT.left=l}else{RT.mode='running';RT.endAt=q.e;RT.left=0}}
+else if(q.m==='paused'&&q.l>0){RT.mode='paused';RT.left=q.l}
+else if(q.m==='done'){RT.mode='done';RT.left=0}}catch(e){}}
 function rtCtx(row){try{const card=row.closest('.card');let name='',no='';
 if(card){const h=card.querySelector('h3');if(h)name=h.textContent.trim();
 const sets=[].slice.call(card.querySelectorAll('.set')),idx=sets.indexOf(row);
@@ -927,31 +914,36 @@ mini.classList.toggle('show',(RT.mode==='running'||RT.mode==='paused'||RT.mode==
 const n=$('rtCtxNo'),tx=$('rtCtxTxt');
 if(RT.ctx&&RT.ctx.name){n.textContent=RT.ctx.no||'→';tx.innerHTML='Дальше: <b>'+esc(RT.ctx.name)+'</b>'+(RT.ctx.no&&RT.ctx.no!=='✓'?' · подход '+esc(RT.ctx.no):' · упражнение закрыто')}
 else{n.textContent='→';tx.innerHTML='База: отдых до пульса ниже <b>130</b>. Изоляция — 90 секунд.'}
-rtDock();document.title=RT.mode==='running'?(t+' · отдых'):RT.mode==='done'?'✓ отдых вышел':baseTitle}
+rtDock()}
 function rtOpen(){$('rtOverlay').classList.add('show');rtPaint()}
 function rtClose(){$('rtOverlay').classList.remove('show');rtPaint()}
 function rtLoop(){clearInterval(RT.iv);RT.iv=setInterval(()=>{if(RT.mode!=='running')return;
 const l=Math.ceil((RT.endAt-Date.now())/1000);if(l<=0){rtFinish();return}
 if(l!==RT.left){RT.left=l;rtPaint();if(l<=3&&l!==RT.lastTick){RT.lastTick=l;playTick()}
-if(Date.now()-RT.mediaAt>900){RT.mediaAt=Date.now();rtMeta();rtStore()}}},250)}
-function rtFinish(){clearInterval(RT.iv);RT.iv=null;RT.mode='done';RT.left=0;RT.endAt=Date.now();RT.lastTick=-1;rtStore();
-beep('end');if(!RT.notified){RT.notified=true;notifyRest()}
-rtMeta();rtPaint();toast('Отдых закончен — следующий подход');if(document.visibilityState==='visible')rtOpen()}
+if(l%5===0)rtStore()}},250)}
+function rtFinish(late){clearInterval(RT.iv);RT.iv=null;RT.mode='done';RT.left=0;RT.lastTick=-1;rtStore();
+beep('end');if(!RT.notified){RT.notified=true;notifyRest(late?'Отдых вышел, пока приложение было свёрнуто':'Следующий подход')}
+rtPaint();toast(late?'Отдых вышел '+late+' назад — следующий подход':'Отдых закончен — следующий подход',!!late);
+if(document.visibilityState==='visible')rtOpen()}
 function rtStart(sec){sec=Math.max(15,Math.round(sec||RT.preset||150));
 RT.preset=sec;RT.left=sec;RT.endAt=Date.now()+sec*1000;RT.mode='running';RT.notified=false;RT.lastTick=-1;rtStore();
-askNotif();awake();rtSession();rtLoop();rtMeta();rtPaint();rtOpen();buzz(12);reqWake()}
+askNotif();awake();rtLoop();rtPaint();rtOpen();buzz(12);reqWake()}
 function rtPause(){if(RT.mode!=='running')return;RT.left=Math.max(0,Math.ceil((RT.endAt-Date.now())/1000));RT.mode='paused';
-clearInterval(RT.iv);RT.iv=null;rtStore();rtMeta();rtPaint()}
-function rtResume(){if(RT.mode==='paused'){RT.endAt=Date.now()+RT.left*1000;RT.mode='running';RT.notified=false;rtStore();rtSession();rtLoop();rtMeta();rtPaint();return}rtStart(RT.preset)}
+clearInterval(RT.iv);RT.iv=null;rtStore();rtPaint()}
+function rtResume(){if(RT.mode==='paused'){RT.endAt=Date.now()+RT.left*1000;RT.mode='running';RT.notified=false;rtStore();rtLoop();rtPaint();return}rtStart(RT.preset)}
 function rtAdd(d){if(RT.mode==='running'){RT.endAt+=d*1000;RT.left=Math.max(1,Math.ceil((RT.endAt-Date.now())/1000));RT.preset=Math.max(RT.preset,RT.left);RT.notified=false}
 else if(RT.mode==='paused'){RT.left=Math.max(5,RT.left+d);RT.preset=Math.max(RT.preset,RT.left)}
 else{RT.preset=Math.max(15,RT.preset+d);RT.left=RT.preset}
-rtStore();rtMeta();rtPaint();buzz(8)}
+rtStore();rtPaint();buzz(8)}
 function rtStop(cl){clearInterval(RT.iv);RT.iv=null;RT.mode='idle';RT.left=RT.preset;RT.endAt=0;RT.notified=false;RT.lastTick=-1;
-rtStore();rtUnsess();rtPaint();if(cl!==false)rtClose()}
+rtStore();rtPaint();if(cl!==false)rtClose()}
 function rtPreset(sec){RT.preset=sec;if(RT.mode==='running'){rtStart(sec);return}RT.left=sec;if(RT.mode==='done')RT.mode='idle';rtStore();rtPaint()}
-function rtResync(){if(RT.mode==='running'){const l=Math.ceil((RT.endAt-Date.now())/1000);if(l<=0){rtFinish();return}RT.left=l;rtLoop()}
-if(RT.mode==='running'||RT.mode==='paused')rtSession();rtMeta();rtPaint()}
+function rtResync(){
+if(RT.mode==='running'){
+const l=Math.ceil((RT.endAt-Date.now())/1000);
+if(l<=0){const late=Math.abs(l);rtFinish(late>=60?Math.round(late/60)+' мин':late+' сек');return}
+RT.left=l;rtLoop()}
+rtPaint()}
 $('rtMain').onclick=()=>{RT.mode==='running'?rtPause():rtResume()};
 $('rtStop').onclick=()=>rtStop(true);$('rtPlus').onclick=()=>rtAdd(30);$('rtMinus').onclick=()=>rtAdd(-30);$('rtHide').onclick=rtClose;
 $('rtMute').onclick=()=>{S.sound=!S.sound;save();renderHeader();rtPaint();if(S.sound)beep('ok');toast(S.sound?'Звук и вибрация включены':'Звук выключен',!S.sound)};
@@ -961,9 +953,10 @@ $('rtMini').onclick=e=>{if(e.target.closest('#rtMiniBtn')){RT.mode==='running'?r
 $('rtOverlay').addEventListener('click',e=>{if(e.target===$('rtOverlay'))rtClose()});
 $('btnTimer').onclick=()=>{$('rtOverlay').classList.contains('show')?rtClose():rtOpen()};
 $('rtMel').onclick=()=>openMel();
-$('rtKeep').addEventListener('pause',()=>{if(RT.mode==='running'&&document.visibilityState==='visible')rtPause()});
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){rtResync();layout();if(S.wake&&!wakeOn)reqWake()}});
-window.addEventListener('pageshow',()=>{rtResync();layout()});window.addEventListener('focus',rtResync);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){rtResync();layout();if(S.wake&&!wakeOn)reqWake()}else rtStore()});
+window.addEventListener('pageshow',()=>{rtResync();layout()});
+window.addEventListener('focus',rtResync);
+window.addEventListener('pagehide',rtStore);
 window.addEventListener('beforeunload',()=>{save();rtStore();cStore();lStore()});
 const rtGuard={};
 document.addEventListener('input',e=>{const i=e.target;
@@ -1124,7 +1117,7 @@ if(lw)h+='<div class="fsec"><div class="fsec-h"><span class="ic cy">⌚</span><b
 h+='<div class="fsec"><div class="fsec-h"><span class="ic cy">🚴</span><b>Кардио · зона 2</b><span class="hint">пульс 110–128</span></div><div class="fgrid"><div class="fld"><label>минуты</label><input type="text" inputmode="numeric" id="cMin" value="'+(c?c.min:'')+'" placeholder="25"></div><div class="fld"><label>пульс</label><input type="text" inputmode="numeric" id="cHr" value="'+(c?c.hr:'')+'" placeholder="120"></div><div class="fld"><label>&nbsp;</label><button class="btn btn-lime" id="cAdd" style="height:36px">Записать</button></div></div>';
 if(c)h+='<div class="drow" style="margin-top:9px"><span class="dt">'+c.min+'′</span><span class="dd"><b>Кардио записано</b>пульс '+(c.hr||'—')+'</span><button data-cardiodel="1">Убрать</button></div>';
 h+='</div>';
-const checks=S.restChecks[k]||{},tips=[{id:'steps',e:'🚶',b:'9–10 тыс. шагов',s:'Сейчас 6 тыс.'},{id:'sleep',e:'😴',b:'Сон 7–9 часов',s:'Главный фактор роста'},{id:'water',e:'💧',b:'Вода 3 л · креатин 5 г',s:'Вода влияет на InBody'},{id:'kcal',e:'🍽',b:'Калории ~3000–3050',s:'Белок 190–200 г'}];
+const checks=S.restChecks[k]||{},tips=[{id:'steps',e:'🚶',b:'9–10 тыс. шагов',s:'Сейчас 6 тыс.'},{id:'sleep',e:'😴',b:'Сон 7–9 часов',s:'Главный фактор роста'},{id:'water',e:'💧',b:'Вода 3–3,5 л · креатин 5 г',s:'Мочевина 7,8 — воды мало'},{id:'kcal',e:'🍽',b:'Калории ~3000–3050',s:'Белок 190–200 г'}];
 h+='<div class="fsec"><div class="fsec-h"><span class="ic">✅</span><b>Чек-лист дня</b></div><div class="tips">'+tips.map(t=>'<button class="tip '+(checks[t.id]?'done':'')+'" data-check="'+t.id+'"><span class="e">'+t.e+'</span><span><b>'+t.b+'</b><span>'+t.s+'</span></span></button>').join('')+'</div></div>';
 let nx=null;for(let i=1;i<10&&!nx;i++){const cand=addD(k,i),dd=DOW_DAY[pk(cand).getDay()];if(dd)nx={k:cand,day:dd}}
 if(nx)h+='<button class="next" data-go="'+nx.k+'"><span class="cal-i">'+pk(nx.k).getDate()+'</span><span class="nx"><span class="a">Ближайшая тренировка</span><span class="b">'+WD[pk(nx.k).getDay()]+', '+fs(nx.k)+' · День '+nx.day+' — '+DAY_NAMES[nx.day]+'</span></span><svg class="ar" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>';
@@ -1305,11 +1298,15 @@ rows.slice().reverse().forEach(r=>{body+='<tr><td>'+fs(r.k)+'</td><td class="mx"
 body+='</tbody></table>';
 openSheet(e.name,'День '+res.day+' · история',body,'<button class="btn" data-close="1">Закрыть</button>')}
 function openData(){const keys=[...new Set([...Object.keys(S.log),...Object.keys(S.parked).map(x=>x.split('|')[0])])].sort().reverse();
-let body='<div class="fmt">Записанная тренировка важнее ручного назначения. Смена дня откладывает запись, а не удаляет.</div><div class="sect-t">Все даты · '+keys.length+'</div>';
+let body='<div class="ico-card"><canvas id="icoPrev" width="152" height="152"></canvas><div class="tx"><b>Иконка приложения — гантель</b><span>Так она выглядит на домашнем экране. Если там ещё старая картинка: удали ярлык и добавь заново — Safari → Поделиться → «На экран Домой».</span></div><button class="btn" id="icoDl">PNG</button></div>';
+body+='<div class="fmt">Записанная тренировка важнее ручного назначения. Смена дня откладывает запись, а не удаляет.</div><div class="sect-t">Все даты · '+keys.length+'</div>';
 keys.forEach(k=>{const r=S.log[k],lg=hasData(r),pkd=parkedOf(k),sd=SEED[k]?SEED[k].day:null,need=sd&&(!lg||r.day!==sd);
 body+='<div class="drow"><span class="dt">'+fs(k)+'</span><span class="dd">'+(lg?'<b>День '+r.day+'</b> · '+filledCount(r)+' подх · '+nf(volOf(k))+' кг':'нет активной записи')+(pkd.length?'<br>отложено: '+pkd.map(p=>'Д'+p.day).join(', '):'')+'</span>'+(lg&&!need?'<span class="st ok">ок</span>':need?'<button data-ref="'+k+'">Эталон</button>':pkd.length?'<button data-restore="'+pkd[0].day+'">Вернуть</button>':'<span class="st pk">пусто</span>')+'</div>'});
 body+='<div class="sect-t">Перенос на другое устройство</div><textarea class="ta" id="jsonTa" style="min-height:120px;font-family:var(--mono);font-size:10.5px" placeholder="Вставь JSON и нажми «JSON»"></textarea>';
 openSheet('Данные и целостность',keys.length+' дат',body,'<button class="btn" id="jsonCopy">Копировать</button><button class="btn" id="jsonLoad">JSON</button><button class="btn btn-lime" data-repair="1">Починить</button>');
+const pc=$('icoPrev');if(pc){const px=pc.getContext('2d');drawDumbbell(px,152)}
+$('icoDl').onclick=()=>{const c=document.createElement('canvas');c.width=c.height=512;drawDumbbell(c.getContext('2d'),512);
+const a=document.createElement('a');a.href=c.toDataURL('image/png');a.download='dumbbell-icon-512.png';a.click();toast('Иконка скачана')};
 $('jsonCopy').onclick=()=>{const t=JSON.stringify(S);$('jsonTa').value=t;
 if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(t).then(()=>toast('JSON скопирован')).catch(()=>{$('jsonTa').select();toast('Скопируй вручную',true)});else{$('jsonTa').select();toast('Скопируй вручную',true)}};
 $('jsonLoad').onclick=()=>{try{const p=JSON.parse($('jsonTa').value);if(!p||!p.plan||!p.log)throw new Error('не похоже на данные');
@@ -1322,11 +1319,10 @@ pushUndo(s);save();closeSheet();renderAll();toast('Эталон восстано
 /* ═══ УНИВЕРСАЛЬНЫЙ БЛОК ═══ */
 const SAMPLE=['ДНЕВНИК 25.11.2026','ДЕНЬ 2','',
 'ФАКТ','Жим штанги лёжа | 20/60/75/90/92.5/92.5 | 12/8/4/12/10/10','Подтягивания | 100.6/100.6/100.6/100.6 | 8/8/7/6','Жим гантелей под 45° | 24/26/26/26 | 10/12/10/9','',
-'ЧАСЫ | 1020 | 86 | 134 | 176 | 3.5 | 18 | 3/22/38/21/2 | 01:26:10','САМОЧУВСТВИЕ | 2 | 2 | 1 | Отдых по пульсу держал, третьи подходы выросли','ВЕС | 25.11.2026 | 100.7','',
-'ПЛАН 1','Румынская тяга | 45/55 | 8–12/8–12','Икры машина | 129/129/129 | 12–15/10–15/10–15','',
-'РАЗБОР','ИТОГ | 13180 | 12389 | 86','Вердикт | Жим лёжа закрыл верхнюю границу на новой ступени — прогрессия работает.',
-'Жим штанги лёжа | up | 87,5×12 · 90×10 · 90×10 | 90×12 · 92,5×10 · 92,5×10 | 92.5/95/95 | Все три на потолке → +2,5 кг',
-'Подтягивания | hold | 8 · 8 · 6 · 5 | 8 · 8 · 7 · 6 | — | Цель 8·8·8·8, свой вес держим','',
+'ЧАСЫ | 1020 | 86 | 134 | 176 | 3.5 | 18 | 3/22/38/21/2 | 01:26:10','САМОЧУВСТВИЕ | 2 | 2 | 1 | Отдых по пульсу держал','ВЕС | 25.11.2026 | 100.7','',
+'ПЛАН 2','Жим штанги лёжа | 92.5/95/95 | 10–12/8–10/8–10','',
+'РАЗБОР','ИТОГ | 13180 | 12389 | 86','Вердикт | Жим закрыл верхнюю границу на новой ступени — прогрессия работает.',
+'Жим штанги лёжа | up | 87,5×12 · 90×10 · 90×10 | 90×12 · 92,5×10 · 92,5×10 | 92.5/95/95 | Все три на потолке','',
 'РЕШЕНИЯ','Калории | ~3000–3050 | Белок 190–200 г не меняем','',
 'СВОДКА','25.11 (День 2): объём 13 180 кг (+6,4% к 18.11), 28/28 подходов, 86 мин.'].join('\n');
 function parseDate(s){const t=String(s||'').trim();let m=t.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
@@ -1457,9 +1453,9 @@ const c=[['Факт',P.facts.reduce((a,f)=>a+f.idxs.length,0)],['Часы',P.wat
 ['InBody',P.inbody?P.inbody.rows.length:0],['План',P.plan.reduce((a,f)=>a+f.idxs.length,0)],['Разбор',P.analysis?P.analysis.items.length+(P.analysis.verdict?1:0):0],['Решения',P.decisions.length+P.summary.length]];
 return '<div class="imp-grid">'+c.map(x=>'<div class="imp-cell'+(x[1]?' on':'')+'"><div class="k">'+x[0]+'</div><div class="v">'+x[1]+'</div></div>').join('')+'</div>'}
 function openPaste(){
-const body='<div class="fmt">Вставь <b>один блок</b> от тренера. Секции: <code>ДНЕВНИК дата</code>, <code>ДЕНЬ N</code>, <code>ФАКТ</code>, <code>ЧАСЫ</code>, <code>САМОЧУВСТВИЕ</code>, <code>ВЕС</code>, <code>INBODY</code>, <code>ПЛАН N</code>, <code>РАЗБОР</code>, <code>РЕШЕНИЯ</code>, <code>СВОДКА</code>. Строки упражнений: <code>Название | веса через / | повторы через /</code> — все подходы или только рабочие.</div>'+
+const body='<div class="fmt">Вставь <b>один блок</b> от тренера. Секции: <code>ДНЕВНИК дата</code>, <code>ДЕНЬ N</code>, <code>ФАКТ</code>, <code>ЧАСЫ</code>, <code>САМОЧУВСТВИЕ</code>, <code>ВЕС</code>, <code>INBODY</code>, <code>ПЛАН N</code>, <code>РАЗБОР</code>, <code>РЕШЕНИЯ</code>, <code>СВОДКА</code>.</div>'+
 '<textarea class="plan-ta" id="impTa" placeholder="ДНЕВНИК 25.11.2026&#10;ДЕНЬ 2&#10;ФАКТ&#10;Жим штанги лёжа | 20/60/75/90/92.5/92.5 | 12/8/4/12/10/10"></textarea>'+
-'<div class="tog on" id="impReplace"><div class="t"><b>Заменять существующее</b><span>выкл — только дополнять пустое</span></div><div class="sw"></div></div>'+
+'<div class="tog on" id="impReplace" style="margin-top:8px"><div class="t"><b>Заменять существующее</b><span>выкл — только дополнять пустое</span></div><div class="sw"></div></div>'+
 '<div id="impPv" style="margin-top:12px"></div>';
 openSheet('Внести всё одним блоком','факты · часы · InBody · план · разбор',body,
 '<button class="btn" id="impSample">Пример</button><button class="btn" id="impClear">Очистить</button><button class="btn btn-lime" id="impApply">Применить</button>');
@@ -1522,7 +1518,9 @@ $('melName').textContent=M.name+' · '+T.name;
 $('melMeta').textContent=M.notes.length+' нот · '+((M.notes.length*C.gap/1000+C.dec/10)*C.rep).toFixed(1)+' с';
 [].forEach.call($('segMel').children,b=>b.classList.toggle('on',b.dataset.m===C.mel));
 [].forEach.call($('segTone').children,b=>b.classList.toggle('on',b.dataset.t===C.tone));
+[].forEach.call($('segMix').children,b=>b.classList.toggle('on',(b.dataset.mix==='1')===!!C.mix));
 $('mVib').classList.toggle('on',!!C.vib);$('mGlow').classList.toggle('on',!!C.glow);$('mTick').classList.toggle('on',!!C.tick);
+$('mixState').textContent=sessionSupported()?(C.mix?'ambient — микс поверх музыки':'transient — на миг приглушает музыку'):'AudioSession API недоступен в этом браузере';
 let lg='';for(let i=0;i<M.notes.length;i++)lg+='<span><i style="background:'+HUES[i%HUES.length]+'"></i>'+noteName(M.notes[i]+C.key)+'</span>';
 $('melLegend').innerHTML=lg;drawStage()}
 function paintScreen(){if(!$('mTop'))return;
@@ -1537,6 +1535,7 @@ function openMel(){
 const body='<div class="mel-tabs"><button data-mtab="sound" class="on">♪ Мелодия</button><button data-mtab="screen">▣ Экран</button></div>'+
 '<div class="mel-view on" id="mvSound">'+
 '<div class="mel-stage"><div class="sh2"><b id="melName">Колокольчик</b><i id="melMeta">4 ноты</i></div><canvas id="melCanvas"></canvas><div class="lg" id="melLegend"></div></div>'+
+'<div class="mrow hi"><div class="top"><b>Музыка в наушниках</b><i id="mixState">—</i></div><div class="seg c2" id="segMix"><button data-mix="1" class="on">Не прерывать</button><button data-mix="0">Приглушать на миг</button></div></div>'+
 '<div class="mrow hi"><div class="top"><b>Мелодия</b><i id="vMel">Колокольчик</i></div><div class="seg c3" id="segMel"><button data-m="bell" class="on">Колокольчик</button><button data-m="marimba">Маримба</button><button data-m="kalimba">Калимба</button><button data-m="harp">Арфа</button><button data-m="box">Music box</button><button data-m="chime">Чайм</button></div></div>'+
 '<div class="mrow"><div class="top"><b>Тембр</b><i id="vTone">Стекло</i></div><div class="seg c4" id="segTone"><button data-t="glass" class="on">Стекло</button><button data-t="wood">Дерево</button><button data-t="metal">Металл</button><button data-t="soft">Мягкий</button></div></div>'+
 '<div class="mrow hi"><div class="top"><b>Громкость мелодии</b><i id="vVol">72%</i></div><input type="range" class="msl" id="mVol" min="0" max="100" step="1" value="72"></div>'+
@@ -1549,6 +1548,7 @@ const body='<div class="mel-tabs"><button data-mtab="sound" class="on">♪ Ме�
 '<div class="tog on" id="mVib"><div class="t"><b>Мягкая вибрация</b><span>два коротких касания</span></div><div class="sw"></div></div>'+
 '<div class="tog on" id="mGlow"><div class="t"><b>Световая волна</b><span>лаймовое свечение</span></div><div class="sw"></div></div>'+
 '<div class="tog on" id="mTick"><div class="t"><b>Отсчёт последних 3 с</b><span>деревянная капля</span></div><div class="sw"></div></div>'+
+'<div class="rt-note" style="margin-bottom:12px"><span>🎧</span><span><b>Режим «Не прерывать»</b> ставит аудиосессию ambient: сигнал звучит поверх музыки, ничего не останавливается. В беззвучном режиме iPhone ambient молчит — тогда переключи на «Приглушать на миг».</span></div>'+
 '</div>'+
 '<div class="mel-view" id="mvScreen">'+
 '<div class="diag"><div class="d" id="dgTop"><div class="k">Шапка → контент</div><div class="v">—</div><div class="s">зазор</div></div><div class="d" id="dgCard"><div class="k">Между карточками</div><div class="v">—</div><div class="s">зазор</div></div><div class="d" id="dgBot"><div class="k">Контент → док</div><div class="v">—</div><div class="s">запас</div></div></div>'+
@@ -1568,6 +1568,9 @@ document.querySelector('.mel-tabs').onclick=e=>{const b=e.target.closest('[data-
 [].forEach.call(document.querySelectorAll('.mel-tabs button'),x=>x.classList.toggle('on',x===b));
 $('mvSound').classList.toggle('on',t==='sound');$('mvScreen').classList.toggle('on',t==='screen');
 if(t==='sound'){sizeCanvas();paintMel()}else{layout();paintScreen()}};
+$('segMix').onclick=e=>{const b=e.target.closest('[data-mix]');if(!b)return;
+C.mix=b.dataset.mix==='1';cStore();applySession();paintMel();preview(true);
+toast(C.mix?'Музыка не прерывается':'Сигнал приглушит музыку на миг',!C.mix)};
 $('segMel').onclick=e=>{const b=e.target.closest('[data-m]');if(!b)return;const M=MEL[b.dataset.m];
 C.mel=b.dataset.m;C.gap=M.gap;C.dec=M.dec;C.shim=M.shim;cStore();paintMel();preview(true)};
 $('segTone').onclick=e=>{const b=e.target.closest('[data-t]');if(!b)return;C.tone=b.dataset.t;cStore();paintMel();preview(true)};
@@ -1579,7 +1582,7 @@ $('mVib').onclick=()=>{C.vib=!C.vib;cStore();paintMel();if(C.vib)buzz([14,70,14]
 $('mGlow').onclick=()=>{C.glow=!C.glow;cStore();paintMel();if(C.glow)glow(420)};
 $('mTick').onclick=()=>{C.tick=!C.tick;cStore();paintMel();if(C.tick)playTick()};
 $('melTest').onclick=()=>{awake();preview(true)};
-$('melReset').onclick=()=>{if($('mvSound').classList.contains('on')){C=Object.assign({},MEL_DEF);cStore();paintMel();preview(true)}
+$('melReset').onclick=()=>{if($('mvSound').classList.contains('on')){C=Object.assign({},MEL_DEF);cStore();applySession();paintMel();preview(true)}
 else{L=Object.assign({},LAY_DEF);lStore();layout();paintScreen()}};
 $('segDens').onclick=e=>{const b=e.target.closest('[data-d]');if(!b)return;applyDens(b.dataset.d);lStore();layout();paintScreen()};
 [['mTop','top'],['mBot','bot'],['mCard','card'],['mRad','rad'],['mSide','side']].forEach(p=>{
@@ -1823,6 +1826,48 @@ S.planDate=fs(today());hydrateCoach();pushUndo(s);save();renderAll();scrollCal(t
 toast('Excel загружен · '+cnt+' подходов · часы '+wn+' · разбор '+cn);setTimeout(openCoach,650)}
 catch(err){toast('Ошибка: '+(err&&err.message?err.message:err),true);beep('err')}};
 fr.readAsArrayBuffer(file)}
+/* ═══ ИКОНКА: ГАНТЕЛЬ ═══ */
+function drawDumbbell(x,size){
+  const s=size/512;
+  x.save();x.setTransform(1,0,0,1,0,0);x.clearRect(0,0,size,size);x.scale(s,s);
+  const bg=x.createLinearGradient(0,0,512,512);
+  bg.addColorStop(0,'#141b10');bg.addColorStop(.5,'#0b0f12');bg.addColorStop(1,'#08161b');
+  x.fillStyle=bg;x.fillRect(0,0,512,512);
+  const rg=x.createRadialGradient(170,140,0,170,140,430);
+  rg.addColorStop(0,'rgba(200,242,78,.20)');rg.addColorStop(.55,'rgba(95,198,226,.07)');rg.addColorStop(1,'rgba(200,242,78,0)');
+  x.fillStyle=rg;x.fillRect(0,0,512,512);
+  const rr=(a,b,w,h,r)=>{x.beginPath();if(x.roundRect)x.roundRect(a,b,w,h,r);else x.rect(a,b,w,h);x.fill()};
+  const metal=x.createLinearGradient(108,181,404,331);
+  metal.addColorStop(0,'#c8f24e');metal.addColorStop(.48,'#9fd23f');metal.addColorStop(1,'#5fc6e2');
+  x.shadowColor='rgba(200,242,78,.45)';x.shadowBlur=26;x.shadowOffsetY=6;
+  x.fillStyle=metal;
+  rr(198,240,116,32,16);
+  rr(152,181,46,150,17);rr(314,181,46,150,17);
+  rr(108,207,34,98,13);rr(370,207,34,98,13);
+  x.shadowBlur=0;x.shadowOffsetY=0;
+  x.fillStyle='rgba(8,9,11,.34)';
+  rr(206,250,100,7,3.5);
+  rr(163,196,10,120,5);rr(339,196,10,120,5);
+  x.fillStyle='rgba(255,255,255,.20)';
+  rr(158,188,8,52,4);rr(320,188,8,52,4);
+  x.restore();
+}
+function setIcons(){
+  try{
+    const c180=document.createElement('canvas');c180.width=c180.height=180;drawDumbbell(c180.getContext('2d'),180);
+    const c512=document.createElement('canvas');c512.width=c512.height=512;drawDumbbell(c512.getContext('2d'),512);
+    const u180=c180.toDataURL('image/png'),u512=c512.toDataURL('image/png');
+    $('touchIcon').setAttribute('href',u180);
+    $('favIcon').setAttribute('href',u180);
+    const mf={name:'Дневник тренировок',short_name:'Дневник',start_url:'.',scope:'.',display:'standalone',
+      orientation:'portrait',background_color:'#08090b',theme_color:'#08090b',
+      icons:[{src:u180,sizes:'180x180',type:'image/png',purpose:'any'},
+             {src:u512,sizes:'512x512',type:'image/png',purpose:'any maskable'}]};
+    let href;try{href=URL.createObjectURL(new Blob([JSON.stringify(mf)],{type:'application/json'}))}
+    catch(e){href='data:application/json;charset=utf-8,'+encodeURIComponent(JSON.stringify(mf))}
+    $('manifestLink').setAttribute('href',href);
+  }catch(e){}
+}
 /* ═══ события ═══ */
 $('btnPaste').onclick=openPaste;$('btnMel').onclick=openMel;
 $('btnSound').onclick=()=>{S.sound=!S.sound;save();renderHeader();rtPaint();if(S.sound){beep('ok');buzz(20)}toast(S.sound?'Звук и вибрация включены':'Звук выключен',!S.sound)};
@@ -1888,25 +1933,17 @@ document.addEventListener('paste',e=>{
 if($('sheet').classList.contains('show'))return;
 const t=(e.clipboardData||window.clipboardData).getData('text');
 if(t&&/ДНЕВНИК|ФАКТ|ЧАСЫ\s*\||РАЗБОР/i.test(t)){openPaste();setTimeout(()=>{const ta=$('impTa');if(ta){ta.value=t;ta.dispatchEvent(new Event('input'))}},120)}});
-/* ═══ иконка ═══ */
-(function(){try{const c=document.createElement('canvas');c.width=180;c.height=180,x=c.getContext('2d');
-const g=x.createLinearGradient(0,0,180,180);g.addColorStop(0,'#c8f24e');g.addColorStop(.6,'#8fc63c');g.addColorStop(1,'#5fc6e2');
-x.fillStyle='#08090b';x.fillRect(0,0,180,180);x.fillStyle=g;
-if(x.roundRect){x.beginPath();x.roundRect(20,20,140,140,34);x.fill()}else x.fillRect(20,20,140,140);
-x.strokeStyle='#08090b';x.lineWidth=13;x.lineCap='round';x.beginPath();
-x.moveTo(52,74);x.lineTo(52,106);x.moveTo(70,62);x.lineTo(70,118);x.moveTo(110,62);x.lineTo(110,118);x.moveTo(128,74);x.lineTo(128,106);x.moveTo(70,90);x.lineTo(110,90);x.stroke();
-$('touchIcon').href=c.toDataURL('image/png')}catch(e){}})();
 /* ═══ старт ═══ */
+setIcons();
 load();lastRepair=seedAndRepair();
 if(!S.date)S.date=Object.keys(SEED).sort().pop();
 if(S.date>CAL_END)S.date=CAL_END;if(S.date<calStart())S.date=calStart();
 if(!S.tab)S.tab='work';
 rtLoad();save();renderAll();rtPaint();
 requestAnimationFrame(()=>{layout();scrollCal(false);updateCalMonth()});
-if(RT.mode==='running'){rtLoop();rtSession()}
+if(RT.mode==='running')rtResync();
 if(S.wake)reqWake();
 setTimeout(layout,300);setTimeout(layout,900);
-setInterval(()=>{if(RT.mode==='running'&&document.visibilityState==='visible')rtMeta()},4000);
 if(lastRepair.length){const r=lastRepair.find(x=>x.k==='2026-11-23')||lastRepair[0];
 setTimeout(()=>toast('Восстановлено: '+fs(r.k)+' · День '+r.day+', '+r.n+' подходов',true),500)}
 else setTimeout(()=>{const res=resolve(S.date),c=countSets(S.date);
