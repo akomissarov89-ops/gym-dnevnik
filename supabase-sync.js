@@ -3,14 +3,14 @@
   const SUPABASE_URL = 'https://nlpjxunxsiqjlplvbyna.supabase.co';
   const SUPABASE_KEY = 'sb_publishable_eZ_2XJfXjOxKpVVBfLvM5g_NAVvudI7';
   const STORAGE_KEY = 'gymDiary.v11';
-  let client = null, currentUser = null, busy = false, ready = false, timer = null;
+  let client = null, currentUser = null, ready = false, timer = null;
   const button = document.createElement('button');
   button.type = 'button';
   button.textContent = '☁ Войти / синхронизация';
   button.setAttribute('aria-label', 'Вход и синхронизация дневника');
   Object.assign(button.style, {position:'fixed',right:'10px',bottom:'calc(env(safe-area-inset-bottom) + 92px)',zIndex:'1000',padding:'9px 12px',borderRadius:'12px',border:'1px solid #3a4a2c',background:'#182015',color:'#c8f24e',font:'600 12px system-ui',boxShadow:'0 3px 14px #0008'});
   document.body.appendChild(button);
-  const status = (s) => { button.textContent = s; };
+  const status = s => { button.textContent = s; };
   const loadSDK = () => new Promise((resolve,reject) => {
     if (window.supabase?.createClient) return resolve();
     const script = document.createElement('script');
@@ -22,7 +22,7 @@
     try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null'); } catch (_) { return null; }
   };
   const writeCloud = async () => {
-    if (!client || !currentUser || !ready || busy) return;
+    if (!client || !currentUser || !ready) return;
     clearTimeout(timer);
     timer = setTimeout(async () => {
       try {
@@ -43,12 +43,16 @@
     ready = false;
     const { data, error } = await client.from('gym_diary_data').select('payload,updated_at').eq('user_id', currentUser.id).maybeSingle();
     if (error) throw error;
-    const local = localPayload();
     if (data?.payload) {
       const useCloud = confirm('В облаке уже есть дневник. Нажми OK, чтобы загрузить его на это устройство. Нажми «Отмена», чтобы оставить данные этого устройства и отправить их в облако.');
       if (useCloud) {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(data.payload));
-        location.reload();
+        // Replace in-memory state only after explicit choice; then persist and redraw without reload.
+        S = Object.assign(S, data.payload);
+        hydrateCoach();
+        ready = true;
+        save();
+        renderAll();
+        status('☁ Облачный дневник загружен');
         return;
       }
     }
@@ -56,15 +60,10 @@
     await writeCloud();
     status('☁ Синхронизация включена');
   };
-  const updateAuthButton = (session) => {
+  const updateAuthButton = session => {
     currentUser = session?.user || null;
-    if (currentUser) {
-      status('☁ ' + (currentUser.email || 'Вошли'));
-      ready = true;
-    } else {
-      ready = false;
-      status('☁ Войти / синхронизация');
-    }
+    ready = false; // Require an explicit sync choice before any cloud writes.
+    status(currentUser ? '☁ ' + (currentUser.email || 'Вошли') : '☁ Войти / синхронизация');
   };
   button.addEventListener('click', async () => {
     try {
@@ -77,7 +76,7 @@
         client.auth.onAuthStateChange((_event, session) => updateAuthButton(session));
       }
       if (currentUser) {
-        const action = prompt('Введи 1, чтобы синхронизировать сейчас, или 2, чтобы выйти.', '1');
+        const action = prompt('Введи 1, чтобы проверить/синхронизировать дневник, или 2, чтобы выйти.', '1');
         if (action === '2') {
           await client.auth.signOut(); updateAuthButton(null); status('☁ Вы вышли');
         } else if (action === '1') await pullOrChoose();
@@ -108,15 +107,11 @@
       status('☁ Вход / синхронизация');
     }
   });
-  // Existing app save() remains the source of truth locally; cloud writes are debounced.
   const originalSave = save;
   save = function() { originalSave(); writeCloud(); };
   loadSDK().then(() => {
     client = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-    client.auth.getSession().then(({data}) => {
-      updateAuthButton(data.session);
-      if (currentUser) { ready = true; status('☁ ' + currentUser.email); }
-    });
+    client.auth.getSession().then(({data}) => updateAuthButton(data.session));
     client.auth.onAuthStateChange((_event, session) => updateAuthButton(session));
   }).catch(e => console.error('Gym Diary cloud sync:', e));
 })();
