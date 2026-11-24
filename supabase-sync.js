@@ -61,8 +61,9 @@
     status('☁ Синхронизация включена');
   };
   const updateAuthButton = session => {
-    currentUser = session?.user || null;
-    ready = false; // Require an explicit sync choice before any cloud writes.
+    const nextUser = session?.user || null;
+    if (nextUser?.id !== currentUser?.id) ready = false;
+    currentUser = nextUser; // Keep sync enabled across token refreshes for the same user.
     status(currentUser ? '☁ ' + (currentUser.email || 'Вошли') : '☁ Войти / синхронизация');
   };
   button.addEventListener('click', async () => {
