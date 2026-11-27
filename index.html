@@ -1,19 +1,22 @@
 <!DOCTYPE html>
 <!--═══════════════════════════════════════════════════════════════════════════════
- ДНЕВНИК ТРЕНИРОВОК · PWA · v19
- Что изменено против v18:
- 1. УБРАН аудио-элемент и весь MediaSession. Приложение больше не занимает
-    аудиосессию iPhone → музыка в наушниках НЕ останавливается, а остаток отдыха
-    НЕ появляется в Dynamic Island и в «Сейчас играет» на локскрине.
- 2. Таймер живёт только на абсолютной метке времени endAt + localStorage:
-    свернул, заблокировал, вернулся — остаток пересчитывается по часам устройства.
- 3. Звук конца отдыха идёт через WebAudio с navigator.audioSession.type='ambient'
-    (микс поверх музыки). Переключатель режима — в панели ♪.
- 4. Иконка приложения — ГАНТЕЛЬ. Генерируется в canvas, есть предпросмотр
-    и скачивание PNG в шторке 🗂 «Данные».
- Остальное сохранено: 📥 единый блок тренера, мелодия, плотные отступы,
- читаемые плановые веса, календарь до 2027, Excel на 12 листов.
-═══════════════════════════════════════════════════════════════════════════════-->
+ ДНЕВНИК ТРЕНИРОВОК · PWA · v20
+ Что изменено против v19:
+ 1. КЛАВИАТУРА БОЛЬШЕ НЕ ДВИГАЕТ ПОЛЯ. При заполнении веса и повторов iOS
+    прокручивала документ, и поле уезжало вверх. Позиция скролла фиксируется на
+    момент касания и возвращается; сдвиг происходит только если поле реально
+    оказалось под клавиатурой — ровно на недостающие пиксели. visualViewport.
+ 2. СИГНАЛ ОКОНЧАНИЯ ОТДЫХА РАБОТАЕТ В СВЁРНУТОМ ПРИЛОЖЕНИИ. Мелодия ставится на
+    аудио-часы AudioContext заранее, на точный момент конца отдыха, поэтому
+    спящие в фоне JS-таймеры больше не нужны. Тихий keep-alive не даёт контексту
+    уснуть; если iOS всё же его усыпил — сигнал прозвучит при возврате.
+    Музыка в наушниках по-прежнему не прерывается (режим ambient, без MediaSession).
+ 3. ВСТРОЕН ПАТЧ «ИСТОРИЧЕСКИЕ ПЛАНЫ + ЧЕСТНЫЙ ПРОГРЕСС»: снимок плана на каждую
+    дату, колонка «Источник плана» в журнале, честный Δ в «Прогрессе», шторка 🗓.
+    Больше ничего доклеивать руками не нужно — файл самодостаточен.
+ Остальное v19 сохранено: 📥 единый блок тренера, 6 мелодий, плотные отступы,
+ читаемые плановые веса, календарь до 2027, иконка-гантеля, Excel на 12 листов.
+══════════════════════════════════════════════════════════════════════════════-->
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
@@ -1949,6 +1952,450 @@ setTimeout(()=>toast('Восстановлено: '+fs(r.k)+' · День '+r.da
 else setTimeout(()=>{const res=resolve(S.date),c=countSets(S.date);
 if(res.day&&hasData(S.log[S.date]))toast(fs(S.date)+' · День '+res.day+': '+c.done+'/'+c.total+' подходов, '+nf(volOf(S.date))+' кг');
 else toast('Внеси блок тренера кнопкой 📥')},700);
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════════
+     БЛОК «ИСТОРИЧЕСКИЕ ПЛАНЫ + ЧЕСТНЫЙ ПРОГРЕСС»
+     Идёт после основного <script>. Подменяет journalRows / sheetJournal /
+     sheetProgress и обёртывает save — только по глобальным именам, исходный
+     код основного блока не трогает.
+
+     Что чинит:
+     1. Лист «Журнал подходов»: колонки «План: вес / План: повторения» больше не
+        показывают сегодняшний план для прошлых дат. Для каждой даты берётся свой
+        снимок плана. Добавлена колонка «Источник плана»: снимок / реконструкция /
+        текущий — чтобы было видно, откуда значение.
+     2. Лист «Прогресс»: три артефактных строки исправлены.
+        · строки разделены по дням — «Махи стоя» Д2 (10/12/12) и Д3 (10/9/8) больше
+          не смешиваются, ложные −2 кг ушли;
+        · Δ считается по ОДНОЙ И ТОЙ ЖЕ позиции — первый рабочий подход первого
+          занятия против первого рабочего подхода последнего;
+        · 09.11 «Подъём ногами» выделен в отдельную строку «Подъёмы ног
+          с утяжелением 10 кг» — артефакт +108 кг больше не портит прогресс.
+     3. Снимок плана фиксируется автоматически один раз на дату и больше не
+        перезаписывается, когда я обновляю веса после разбора.
+     4. Кнопка 🗓 в строке сессии → шторка «Планы по датам»: видно источник плана
+        на каждую дату, можно зафиксировать или сбросить снимок.
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<style id="phStyle">
+.ph-src{flex:none;font-size:8.5px;font-weight:800;padding:3px 6px;border-radius:6px;text-transform:uppercase;letter-spacing:.4px}
+.ph-src.snap{background:rgba(99,198,140,.12);color:#63c68c}
+.ph-src.rec{background:rgba(95,198,226,.12);color:#5fc6e2}
+.ph-src.cur{background:rgba(223,174,85,.12);color:#dfae55}
+.ph-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:11px}
+.ph-cell{background:#111417;border:1px solid #20262a;border-radius:12px;padding:9px 10px;position:relative;overflow:hidden}
+.ph-cell::after{content:"";position:absolute;left:0;top:0;bottom:0;width:2px;background:#63c68c}
+.ph-cell.r::after{background:#5fc6e2}.ph-cell.c::after{background:#dfae55}
+.ph-cell .k{font-size:8px;color:#475056;text-transform:uppercase;letter-spacing:.6px;font-weight:800}
+.ph-cell .v{font-family:ui-monospace,Menlo,monospace;font-size:17px;font-weight:800;margin-top:2px;color:#e2e7ea}
+.ph-cell .s{font-size:9px;color:#69737a;margin-top:1px}
+.ph-row{display:flex;align-items:center;gap:9px;background:#111417;border:1px solid #20262a;border-radius:11px;padding:9px 11px;margin-bottom:6px}
+.ph-row .dt{font-family:ui-monospace,Menlo,monospace;font-size:11px;color:#96a0a6;flex:none;width:44px}
+.ph-row .dd{flex:1;min-width:0;font-size:10.5px;color:#69737a;line-height:1.4}
+.ph-row .dd b{color:#e2e7ea;display:block;font-size:11.5px}
+.ph-row .acts{display:flex;gap:5px;flex:none}
+.ph-row .acts button{padding:6px 8px;border-radius:8px;background:rgba(178,213,86,.1);border:1px solid #3a4a2c;color:#b2d556;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit}
+.ph-row .acts button.del{background:rgba(221,115,104,.11);border-color:#4a2f2c;color:#dd7368}
+@media (max-width:359px){.ph-grid{grid-template-columns:repeat(2,1fr)}.ph-row{flex-wrap:wrap}.ph-row .acts{flex:1}}
+</style>
+<script>
+"use strict";
+(function(){
+if(typeof S==='undefined'||typeof XLSX==='undefined'){console.warn('[planHistory] приложение не найдено');return}
+
+/* ─── хранилище снимков ─── */
+const PHKEY='gymDiary.planHistory.v1';
+let HIST={};
+try{const q=JSON.parse(localStorage.getItem(PHKEY)||'null');if(q&&typeof q==='object')HIST=q}catch(e){}
+function phStore(){try{localStorage.setItem(PHKEY,JSON.stringify(HIST))}catch(e){}}
+const clone=o=>JSON.parse(JSON.stringify(o));
+const Rg=(a,b)=>a+'–'+b;
+
+/* ─── реконструкция программы: [вес, повторения] по подходам ─── */
+const D1A=[
+[[20,12],[60,8],[80,5],[100,Rg(10,12)],[100,Rg(10,12)],[100,Rg(8,10)]],
+[[30,10],[40,Rg(8,12)],[50,Rg(8,12)]],
+[[0,15],[150,8],[200,Rg(10,12)],[200,Rg(10,15)],[200,Rg(10,15)]],
+[[73,12],[107,Rg(10,15)],[107,Rg(10,15)],[107,Rg(10,15)]],
+[[100,12],[109,Rg(12,15)],[118,Rg(12,15)]],
+[[102,15],[120,Rg(12,15)],[120,Rg(10,15)],[120,Rg(10,15)]],
+[[12,12],[18,Rg(10,12)],[18,Rg(10,12)],[18,Rg(10,12)]]];
+
+const BW4=[['свой вес',Rg(5,8)],['свой вес',Rg(5,8)],['свой вес',Rg(5,8)],['свой вес',Rg(5,8)]];
+const D2A=[
+[[20,12],[65,8],[85,5],[95,Rg(10,12)],[105,Rg(8,10)],[105,Rg(8,10)]],
+[['свой вес',Rg(8,12)],['свой вес',Rg(8,12)],['свой вес',Rg(8,12)],['свой вес',Rg(8,12)]],
+[[32,10],[36,Rg(10,12)],[38,Rg(8,12)],[38,Rg(8,12)]],
+[[59,10],[68,Rg(10,12)],[73,Rg(10,12)]],
+[[65,Rg(10,12)],[70,Rg(10,12)]],
+[[10,15],[12,Rg(15,20)],[12,Rg(15,20)]],
+[[50,15],[54,Rg(12,15)],[61,Rg(12,15)]],
+[[32,Rg(10,12)],[36,Rg(8,12)],[36,Rg(8,12)]]];
+const D2B=[
+[[20,12],[60,8],[75,4],[87.5,Rg(10,12)],[90,Rg(8,10)],[90,Rg(8,10)]],
+clone(BW4),
+[[24,10],[28,Rg(8,12)],[26,Rg(8,12)],[26,Rg(8,12)]],
+[[59,10],[79,Rg(10,12)],[84,Rg(8,12)]],
+[[65,Rg(10,12)],[65,Rg(8,12)]],
+[[10,15],[12,Rg(15,20)],[12,Rg(15,20)]],
+[[54,15],[65,Rg(12,15)],[68,Rg(10,15)]],
+[[32,Rg(10,12)],[32,Rg(8,12)],[32,Rg(8,12)]]];
+const D2C=[
+[[20,12],[60,8],[75,4],[90,Rg(10,12)],[92.5,Rg(8,10)],[92.5,Rg(8,10)]],
+clone(BW4),
+[[24,10],[26,Rg(8,12)],[26,Rg(8,12)],[26,Rg(8,12)]],
+[[59,10],[79,Rg(10,12)],[84,Rg(8,12)]],
+[[65,Rg(10,12)],[65,Rg(8,12)]],
+[[10,15],[12,Rg(15,20)],[12,Rg(15,20)]],
+[[54,15],[65,Rg(12,15)],[68,Rg(10,15)]],
+[[32,Rg(10,12)],[32,Rg(8,12)],[32,Rg(8,12)]]];
+
+const D3A=[
+[[20,12],[37.5,Rg(8,12)],[40,Rg(8,10)]],
+[[52,12],[77,Rg(8,12)],[79,Rg(8,12)],[79,Rg(8,12)]],
+[[120,12],[138,Rg(10,12)],[138,Rg(8,12)]],
+[[10,15],[10,Rg(15,20)],[10,Rg(15,20)],[10,Rg(15,20)]],
+[[14,15],[18,Rg(12,15)],[16,Rg(12,15)]],
+[[14,12],[20,Rg(10,12)],[18,Rg(10,12)]],
+[[18,12],[27,Rg(10,12)],[27,Rg(10,12)]],
+[[10,12],[12,Rg(10,12)],[12,Rg(10,12)],[10,Rg(10,12)]],
+[[45,12],[59,Rg(10,12)],[64,Rg(10,12)]],
+[[50,Rg(10,15)],[54,Rg(10,15)]]];
+const D3B=[
+[[20,12],[40,Rg(8,12)],[40,Rg(8,10)]],
+[[52,12],[77,Rg(8,12)],[79,Rg(8,12)],[79,Rg(8,12)]],
+[[120,12],[147,Rg(10,12)],[138,Rg(8,12)]],
+[[10,15],[10,Rg(15,20)],[9,Rg(15,20)],[8,Rg(15,20)]],
+[[14,15],[20,Rg(12,15)],[18,Rg(12,15)]],
+[[14,12],[22,Rg(10,12)],[20,Rg(10,12)]],
+[[18,12],[27,Rg(10,12)],[27,Rg(10,12)]],
+[[10,12],[14,Rg(10,12)],[14,Rg(10,12)],[12,Rg(10,12)]],
+[[45,12],[64,Rg(10,12)],[68,Rg(10,12)]],
+[[54,Rg(10,15)],[59,Rg(10,15)]]];
+
+/* дата → {day, ex:[...]} ; источник «реконструкция» */
+const RECON={
+'2026-11-04':{day:2,ex:D2A},
+'2026-11-06':{day:3,ex:D3A},
+'2026-11-09':{day:1,ex:D1A},
+'2026-11-11':{day:2,ex:D2B},
+'2026-11-13':{day:3,ex:D3A},
+'2026-11-16':{day:1,ex:D1A},
+'2026-11-18':{day:2,ex:D2B},
+'2026-11-20':{day:3,ex:D3A},
+'2026-11-23':{day:1,ex:D1A},
+'2026-11-25':{day:2,ex:D2C},
+'2026-11-27':{day:3,ex:D3B}};
+
+/* подмена тренажёра: отдельное имя, чтобы не смешивать с рабочими весами */
+const SUBST={'2026-11-09':{4:'Подъёмы ног с утяжелением 10 кг'}};
+
+/* ─── превращаем компактную запись в структуру плана ─── */
+function materialize(rec){
+const base=S.plan[rec.day]||[];
+return base.map((e,ei)=>{
+const src=rec.ex[ei]||[];
+return {name:e.name,jname:e.jname,note:e.note,sets:e.sets.map((s,si)=>{
+const p=src[si];
+return {type:s.type,planW:p?p[0]:s.planW,planR:p?p[1]:s.planR}})};
+})}
+
+/* ─── источник плана на дату ─── */
+function planFor(k,day){
+if(HIST[k]&&HIST[k][day])return{ex:HIST[k][day],src:'snap'};
+const r=RECON[k];
+if(r&&r.day===day)return{ex:materialize(r),src:'rec'};
+return{ex:S.plan[day]||[],src:'cur'};
+}
+const SRC_LABEL={snap:'снимок',rec:'реконструкция',cur:'текущий'};
+
+/* ─── автофиксация: один раз на дату, до правок тренера ─── */
+function autoSnap(){
+const k=S.date;if(!k)return;
+const r=S.log&&S.log[k];
+if(!r||!hasData(r))return;
+const d=r.day;if(!d)return;
+if(HIST[k]&&HIST[k][d])return;
+if(RECON[k]&&RECON[k].day===d)return;
+HIST[k]=HIST[k]||{};HIST[k][d]=clone(S.plan[d]);phStore();
+}
+const origSave=window.save;
+window.save=function(){try{autoSnap()}catch(e){}return origSave.apply(this,arguments)};
+
+/* ─── имя упражнения с учётом подмены ─── */
+function nameOn(k,day,ei,e){
+const s=SUBST[k];
+if(s&&s[ei]!=null)return s[ei];
+return jn(e);
+}
+
+/* ═══ 1. ЖУРНАЛ: план своей даты + колонка источника ═══ */
+window.journalRows=function(){
+const out=[],store={};
+Object.keys(S.log).forEach(k=>{if(hasData(S.log[k]))store[k]=S.log[k]});
+Object.keys(S.parked).forEach(x=>{const k=x.split('|')[0];if(hasData(S.parked[x])&&!store[k])store[k]=S.parked[x]});
+Object.keys(store).sort().forEach(k=>{
+const r=store[k],day=r.day,pf=planFor(k,day),list=pf.ex||[];
+list.forEach((e,ei)=>{
+const live=(S.plan[day]||[])[ei]||e;
+e.sets.forEach((s,si)=>{
+const x=r.sets[ei+'_'+si];
+if(!x||(num(x.w)==null&&num(x.r)==null))return;
+const isWork=(live.sets[si]?live.sets[si].type:s.type)==='рабочий';
+const vol=(isWork&&num(x.w)!=null&&num(x.r)!=null)?+(num(x.w)*num(x.r)).toFixed(1):0;
+out.push([fd(k),'День '+day,nameOn(k,day,ei,e),si+1,
+(isWork?'рабочий':'разминка'),x.w,x.r,vol,
+s.planW,s.planR,SRC_LABEL[pf.src]]);
+})});
+});
+return out};
+
+window.sheetJournal=function(){
+const hd=['Дата','День','Упражнение','Подход','Тип','Вес, кг','Повторения','Объём, кг','План: вес','План: повторения','Источник плана'];
+const jr=window.journalRows();
+const rows=[['Журнал подходов'],['Объём = вес × повторения по рабочим подходам. «План» — план, действовавший на эту дату. Источник: снимок — зафиксирован приложением, реконструкция — восстановлен по истории программы, текущий — снимка нет.'],hd].concat(jr);
+const ws=XLSX.utils.aoa_to_sheet(rows),n=11;
+ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:n-1}},{s:{r:1,c:0},e:{r:1,c:n-1}}];
+rowS(ws,0,n,TITLE());rowS(ws,1,n,NOTE());rowS(ws,2,n,HEAD());
+let prevD=null,band=0;
+jr.forEach((r,i)=>{
+if(r[0]!==prevD){band++;prevD=r[0]}
+const rr=i+3,fill=band%2?'F2F5F7':'FFFFFF',first=i===0||jr[i-1][0]!==r[0];
+const bd={top:first?BH:BD,bottom:BD,left:BD,right:BD};
+for(let c=0;c<n;c++)sty(ws,rr,c,st({fill:{fgColor:{rgb:fill}},border:bd}));
+sty(ws,rr,2,st({fill:{fgColor:{rgb:fill}},border:bd,alignment:LEFT}));
+sty(ws,rr,5,YEL());sty(ws,rr,6,YEL());
+if(r[4]==='рабочий')sty(ws,rr,4,st({font:{bold:true,color:{rgb:'375623'}},fill:{fgColor:{rgb:fill}},border:bd}));
+if(first)sty(ws,rr,0,st({font:{bold:true},fill:{fgColor:{rgb:fill}},border:bd}));
+const src=r[10];
+sty(ws,rr,10,src==='снимок'?OK():src==='реконструкция'?st({font:{sz:10,color:{rgb:'1F5C70'}},fill:{fgColor:{rgb:'DDEEF5'}},border:bd}):WARN());
+});
+return fin(ws,rows,n,[13,10,36,8,11,9,12,11,11,16,17])};
+
+/* ═══ 2. ПРОГРЕСС: по дням, по одной позиции, без артефактов ═══ */
+window.sheetProgress=function(){
+const hd=['Упражнение','День','Рабочих подходов','Макс. вес, кг','Объём, кг','Первое занятие','Вес 1-го рабочего: первое','Последнее занятие','Вес 1-го рабочего: последнее','Δ по 1-му рабочему, кг'];
+const rows=[['Прогресс по упражнениям · по дням'],['Δ = вес первого рабочего подхода последнего занятия минус вес первого рабочего подхода первого занятия. Одна и та же позиция, поэтому сравнение честное. «Махи стоя» разделены по дням. Замена тренажёра 09.11 вынесена в отдельную строку.'],hd];
+const map=new Map();
+window.journalRows().forEach(r=>{
+if(r[4]!=='рабочий')return;
+const w=num(r[5]),rep=num(r[6]),date=r[0];
+if(w==null)return;
+const key=r[2]+'||'+r[1];
+if(!map.has(key))map.set(key,{name:r[2],day:r[1],n:0,mx:0,vol:0,sess:new Map()});
+const g=map.get(key);
+g.n++;g.mx=Math.max(g.mx,w);g.vol+=w*(rep||0);
+const s=g.sess.get(date)||{first:null,mx:0};
+if(s.first==null)s.first=w;
+s.mx=Math.max(s.mx,w);
+g.sess.set(date,s);
+});
+const keys=[...map.keys()].sort((a,b)=>{
+const A=map.get(a),B=map.get(b);
+if(A.day!==B.day)return A.day<B.day?-1:1;
+return A.name.localeCompare(B.name,'ru')});
+keys.forEach(key=>{
+const g=map.get(key),ds=[...g.sess.keys()].sort((a,b)=>{
+const p=s=>s.split('.').reverse().join('');return p(a)<p(b)?-1:1});
+const f=ds[0],l=ds[ds.length-1];
+const fw=g.sess.get(f).first,lw=g.sess.get(l).first;
+rows.push([g.name,g.day,g.n,g.mx,Math.round(g.vol),f,fw,l,lw,+(lw-fw).toFixed(1)]);
+});
+rows.push(new Array(10).fill(''));
+rows.push(['Строка «Подъёмы ног с утяжелением 10 кг» — замена сломанного тренажёра 09.11. С рабочими весами тренажёра не сравнивается.']);
+const ws=XLSX.utils.aoa_to_sheet(rows),n=10,last=rows.length-1;
+ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:n-1}},{s:{r:1,c:0},e:{r:1,c:n-1}},{s:{r:last,c:0},e:{r:last,c:n-1}}];
+rowS(ws,0,n,TITLE());rowS(ws,1,n,NOTE());rowS(ws,2,n,HEAD());
+for(let r=3;r<last;r++){
+if(!rows[r][0])continue;
+const fill=(r-3)%2?'F2F5F7':'FFFFFF';
+rowS(ws,r,n,st({fill:{fgColor:{rgb:fill}}}));
+sty(ws,r,0,st({font:{bold:true},fill:{fgColor:{rgb:fill}},alignment:LEFT}));
+const d=num(rows[r][9]);
+if(d>0)sty(ws,r,9,OK());else if(d<0)sty(ws,r,9,WARN());
+if(String(rows[r][0]).indexOf('утяжелением')>=0)sty(ws,r,0,st({font:{bold:true,italic:true,color:{rgb:'9C5700'}},fill:{fgColor:{rgb:'FFEB9C'}},alignment:LEFT}));
+}
+rowS(ws,last,n,NOTE());
+return fin(ws,rows,n,[36,10,15,13,12,15,20,15,21,19])};
+
+/* ═══ 3. шторка «Планы по датам» ═══ */
+function phCounts(){
+const ks=[...new Set(Object.keys(S.log).filter(k=>hasData(S.log[k])))].sort().reverse();
+let snap=0,rec=0,cur=0;
+ks.forEach(k=>{const d=S.log[k].day,p=planFor(k,d);
+if(p.src==='snap')snap++;else if(p.src==='rec')rec++;else cur++});
+return{ks,snap,rec,cur}}
+
+function openPlanHistory(){
+const c=phCounts();
+let body='<div class="ph-grid">'+
+'<div class="ph-cell"><div class="k">Снимок</div><div class="v">'+c.snap+'</div><div class="s">зафиксировано</div></div>'+
+'<div class="ph-cell r"><div class="k">Реконструкция</div><div class="v">'+c.rec+'</div><div class="s">по истории</div></div>'+
+'<div class="ph-cell c"><div class="k">Текущий</div><div class="v">'+c.cur+'</div><div class="s">снимка нет</div></div></div>';
+body+='<div class="fmt">Снимок плана фиксируется один раз, когда на дату появляется записанная тренировка, и больше не меняется — даже если веса обновлены после разбора. «Реконструкция» — план восстановлен по истории программы для 04.11–27.11. «Текущий» — снимка нет, показан сегодняшний план: такую дату стоит зафиксировать вручную.</div>';
+body+='<div class="sect-t">Даты с тренировками · '+c.ks.length+'</div>';
+if(!c.ks.length)body+='<div class="empty">Записей пока нет</div>';
+c.ks.forEach(k=>{
+const r=S.log[k],d=r.day,p=planFor(k,d);
+const first=(p.ex||[]).map(e=>{const w=e.sets.filter(s=>s.type==='рабочий').map(s=>s.planW);return w.length?w.join('/'):null}).filter(Boolean).slice(0,3).join(' · ');
+body+='<div class="ph-row"><span class="dt">'+fs(k)+'</span><span class="dd"><b>День '+d+' · '+DAY_NAMES[d]+'</b>'+esc(first||'—')+'</span>'+
+'<span class="ph-src '+p.src+'">'+SRC_LABEL[p.src]+'</span>'+
+'<span class="acts">'+(p.src==='snap'?'<button class="del" data-phdel="'+k+'|'+d+'">Сброс</button>':'<button data-phfix="'+k+'|'+d+'">Фикс</button>')+'</span></div>';
+});
+body+='<div class="sect-t">Что изменилось в выгрузке</div><div class="fmt">«Журнал подходов» — план своей даты + колонка «Источник плана». «Прогресс» — строки по дням, Δ по первому рабочему подходу, замена тренажёра 09.11 отдельной строкой.</div>';
+openSheet('Планы по датам','снимки · реконструкция · контроль',body,
+'<button class="btn" data-close="1">Закрыть</button><button class="btn btn-lime" data-export="1">Excel</button>');
+$('sheetBody').onclick=e=>{
+const f=e.target.closest('[data-phfix]');
+if(f){const[k,d]=f.dataset.phfix.split('|');
+HIST[k]=HIST[k]||{};HIST[k][+d]=clone(S.plan[+d]);phStore();
+toast('План зафиксирован: '+fs(k)+' · День '+d);openPlanHistory();return}
+const t=e.target.closest('[data-phdel]');
+if(t){const[k,d]=t.dataset.phdel.split('|');
+if(HIST[k]){delete HIST[k][+d];if(!Object.keys(HIST[k]).length)delete HIST[k];phStore()}
+toast('Снимок сброшен: '+fs(k),true);openPlanHistory();return}
+}}
+
+/* кнопка 🗓 в строке сессии */
+function injectBtn(){
+const line=document.querySelector('.sess-line');
+if(!line||line.querySelector('[data-phist]'))return;
+const b=document.createElement('button');
+b.className='ic cy';b.setAttribute('data-phist','1');b.setAttribute('aria-label','Планы по датам');b.textContent='🗓';
+const anchor=line.querySelector('[data-history]')||line.querySelector('[data-data]');
+if(anchor)line.insertBefore(b,anchor);else line.appendChild(b);
+}
+document.addEventListener('click',e=>{if(e.target.closest('[data-phist]')){e.stopPropagation();openPlanHistory()}},true);
+if(window.MutationObserver){
+const c=document.getElementById('content');
+if(c)new MutationObserver(()=>injectBtn()).observe(c,{childList:true});
+}
+injectBtn();
+try{autoSnap()}catch(e){}
+})();
+</script>
+<!-- ═══════════════════════════════════════════════════════════════════════════════
+     БЛОК «КЛАВИАТУРА + ФОНОВЫЙ СИГНАЛ»
+     Идёт после основного <script>. Логику основного блока не перезаписывает:
+     только слушает события и обёртывает уже существующие глобальные функции.
+
+     1. КЛАВИАТУРА. iOS при открытии клавиатуры сама крутит документ, из-за чего
+        заполняемое поле уезжает вверх. Здесь позиция скролла фиксируется на момент
+        касания и возвращается обратно; сдвигаемся ровно на столько, на сколько поле
+        реально оказалось под клавиатурой (или под доком), и не больше.
+        Работает через visualViewport — закрывает и Safari, и standalone-PWA.
+
+     2. СИГНАЛ ОТДЫХА В ФОНЕ. v19 ждал setInterval, а в свёрнутом состоянии iOS
+        таймеры ставит на паузу → сигнал приходил только при возврате в приложение.
+        Теперь мелодия один раз ставится на аудио-часы AudioContext на точный момент
+        конца отдыха: JS-таймеры для этого не нужны. Плюс тихий keep-alive-источник,
+        чтобы контекст не усыпили, и statechange-флаг: если контекст всё-таки уснул,
+        сигнал не теряется, а прозвучит при возврате (как раньше).
+     ═══════════════════════════════════════════════════════════════════════════════ -->
+<script>
+"use strict";
+/* ─── 1. КЛАВИАТУРА: ПОЛЕ ВВОДА ОСТАЁТСЯ НА МЕСТЕ ─────────────────────────── */
+(function(){
+  const vv=window.visualViewport;
+  const KB={on:false,base:0,y:0,el:null};
+  function pin(){ if(!KB.on)return; if(Math.round(window.scrollY)!==Math.round(KB.y)) window.scrollTo(0,KB.y); }
+  function limit(){
+    const vh=window.innerHeight||9999;
+    const visB=(vv?((vv.offsetTop+vv.height)||vh):vh);
+    const d=document.querySelector('.dock');
+    return Math.min(visB,d?d.getBoundingClientRect().top:visB)-10;
+  }
+  /* Цель абсолютная: нижний край поля к границе видимой зоны. Повторный вызов
+     ничего не добавляет, а если документ дальше не скроллится — значение не растёт. */
+  function nudge(){
+    const el=KB.el; if(!el||!KB.on||!el.isConnected)return;
+    const r=el.getBoundingClientRect(),lim=limit();
+    if(r.bottom<=lim)return;
+    const t=Math.max(KB.base,Math.round(window.scrollY+(r.bottom-lim)));
+    if(t===KB.y&&Math.round(window.scrollY)===t)return;
+    KB.y=t; window.scrollTo(0,t);
+  }
+  let preY=null,preT=0;
+  document.addEventListener('pointerdown',e=>{
+    const el=e.target.closest?e.target.closest('.inp'):null;
+    if(el){ preY=window.scrollY; preT=Date.now(); }
+  },true);
+  document.addEventListener('focusin',e=>{
+    const el=e.target;
+    if(!el||!el.classList||!el.classList.contains('inp'))return;
+    KB.on=true; KB.el=el;
+    KB.base=KB.y=(preY!=null&&Date.now()-preT<900)?preY:window.scrollY;
+    [0,50,120,260,460,700].forEach(t=>setTimeout(()=>{ pin(); if(t>=120) nudge(); },t));
+  },true);
+  document.addEventListener('focusout',e=>{
+    const to=e.relatedTarget;
+    if(to&&to.classList&&to.classList.contains('inp')){ KB.el=to; KB.base=KB.y=window.scrollY; preY=null; return; }
+    KB.on=false; KB.el=null;
+  },true);
+  if(vv){
+    vv.addEventListener('resize',()=>{ if(!KB.on)return; pin(); requestAnimationFrame(()=>{ pin(); nudge(); }); });
+    vv.addEventListener('scroll',pin);
+  }
+  window.addEventListener('resize',()=>{ if(KB.on) pin(); });
+})();
+
+/* ─── 2. СИГНАЛ ОКОНЧАНИЯ ОТДЫХА ПРИ СВЁРНУТОМ ПРИЛОЖЕНИИ ─────────────────── */
+(function(){
+  if(typeof RT==='undefined'||typeof actx!=='function'||typeof voice!=='function')return;
+  let kaSrc=null,skipEnd=false,ctxBroke=false;
+  function keepAlive(){
+    const c=actx(); if(!c||kaSrc)return;
+    try{
+      const b=c.createBuffer(1,Math.floor(c.sampleRate*0.25),c.sampleRate);
+      kaSrc=c.createBufferSource(); kaSrc.buffer=b; kaSrc.loop=true;
+      const g=c.createGain(); g.gain.value=0.0006;
+      kaSrc.connect(g); g.connect((typeof dry!=='undefined'&&dry)?dry:c.destination);
+      kaSrc.start();
+    }catch(e){ kaSrc=null; }
+  }
+  function watchCtx(){
+    const c=actx(); if(!c||c.__v20)return; c.__v20=1;
+    try{ c.addEventListener('statechange',()=>{ if(c.state==='suspended') ctxBroke=true; }); }catch(e){}
+  }
+  function arm(){
+    RT.schedAt=0; ctxBroke=false;
+    if(!S.sound)return;
+    const c=awake(); if(!c)return;
+    const left=(RT.endAt-Date.now())/1000;
+    if(!(left>0)||left>1800)return;
+    try{
+      const M=MEL[C.mel]||MEL.bell,gap=C.gap/1000,dec=C.dec/10,vol=(C.vol/100)*.62;
+      const t0=c.currentTime+left+.04;
+      for(let r=0;r<C.rep;r++){
+        const off=r*(M.notes.length*gap+dec*.45+.22);
+        for(let i=0;i<M.notes.length;i++)
+          voice(freq(M.base,M.notes[i]+C.key),t0+off+i*gap,dec,vol*(i===M.notes.length-1?1:.9),C.tone,C.shim);
+      }
+      RT.schedAt=Date.now()+left*1000;
+    }catch(e){}
+  }
+  function disarm(){ RT.schedAt=0; try{stopLive()}catch(e){} }
+  const oStart=window.rtStart,oResume=window.rtResume,oPause=window.rtPause,
+        oStop=window.rtStop,oAdd=window.rtAdd,oFinish=window.rtFinish,oBeep=window.beep;
+  window.beep=function(k){ if(k==='end'&&skipEnd){skipEnd=false;return} return oBeep.apply(this,arguments) };
+  window.rtFinish=function(late){
+    const sched=RT.schedAt; RT.schedAt=0; const c=(typeof AC!=='undefined')?AC:null;
+    if(sched&&!ctxBroke&&c&&c.state==='running'&&Math.abs(Date.now()-sched)<2500) skipEnd=true;
+    return oFinish.apply(this,arguments);
+  };
+  window.rtStart=function(sec){ keepAlive(); watchCtx(); oStart.apply(this,arguments); if(RT.mode==='running') arm(); };
+  window.rtResume=function(){ oResume.apply(this,arguments); if(RT.mode==='running'){ keepAlive(); watchCtx(); arm(); } };
+  window.rtPause=function(){ disarm(); return oPause.apply(this,arguments) };
+  window.rtStop=function(c){ disarm(); return oStop.apply(this,arguments) };
+  window.rtAdd=function(d){ disarm(); oAdd.apply(this,arguments); if(RT.mode==='running') arm(); };
+  document.addEventListener('visibilitychange',()=>{
+    if(document.visibilityState!=='visible')return;
+    const c=(typeof AC!=='undefined')?AC:null;
+    if(c&&c.state==='suspended'){ try{c.resume()}catch(e){} }
+    if(RT.mode==='running'&&!RT.schedAt) arm();
+  });
+  if(RT.mode==='running') arm();
+})();
 </script>
 </body>
 </html>
