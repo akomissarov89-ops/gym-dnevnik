@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--═══════════════════════════════════════════════════════════════════════════════
- ДНЕВНИК ТРЕНИРОВОК · PWA · v21
- Что изменено против v19:
+ ДНЕВНИК ТРЕНИРОВОК · PWA · v22
+ Что изменено против v19 (v22 исправляет клавиатуру):
  1. КЛАВИАТУРА БОЛЬШЕ НЕ ДВИГАЕТ ПОЛЯ — НА ВСЕХ ВКЛАДКАХ. При заполнении веса и
     повторов iOS прокручивала документ, и поле уезжало вверх. Позиция скролла
     фиксируется на момент касания и возвращается; сдвиг происходит только если
@@ -2319,14 +2319,59 @@ try{autoSnap()}catch(e){}
      ═══════════════════════════════════════════════════════════════════════════════ -->
 <script>
 "use strict";
-/* ─── 1. КЛАВИАТУРА: НАТИВНОЕ УПРАВЛЕНИЕ iOS ───────────────────────────
-   Не перехватываем visualViewport и не вызываем scrollTo при фокусе.
-   На iOS эти действия конфликтуют с системным перемещением viewport при
-   открытии клавиатуры и могут вызывать скачки и потерю фокуса.
-   Оставляем браузеру управление клавиатурой и прокруткой.
+/* ─── 1. КЛАВИАТУРА iOS: НИЖНЯЯ ПАНЕЛЬ + АКТИВНОЕ ПОЛЕ ─────────────────
+   Исправление v22: visualViewport сообщает реальную высоту видимой области.
+   Поднимаем dock над клавиатурой и увеличиваем нижний отступ контента.
+   Прокручиваем страницу только если активное поле действительно перекрыто
+   клавиатурой/нижней панелью; обычный скролл и нативный фокус не трогаем.
 */
 (function(){
-  // Намеренно без обработчиков focus/scroll/visualViewport.
+  const vv=window.visualViewport, dock=document.querySelector('.dock'), main=document.getElementById('scroll');
+  if(!dock||!main)return;
+  let raf=0, settle=0, lastInset=0;
+  const isField=el=>el&&/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName);
+  function inset(){
+    if(!vv)return 0;
+    return Math.max(0,Math.round(window.innerHeight-(vv.height+vv.offsetTop)));
+  }
+  function placeDock(){
+    const k=inset(); lastInset=k;
+    dock.style.bottom=k>80?(k+'px'):'';
+    const dh=dock.getBoundingClientRect().height;
+    document.documentElement.style.setProperty('--fixBot',(dh+k+14)+'px');
+    document.documentElement.style.setProperty('--keyboardInset',k+'px');
+    return k;
+  }
+  function revealFocused(){
+    const el=document.activeElement;
+    if(!isField(el))return;
+    const k=placeDock(), vTop=vv?vv.offsetTop:0, vBottom=vv?(vv.offsetTop+vv.height):window.innerHeight;
+    const dockTop=vBottom-dock.getBoundingClientRect().height;
+    const r=el.getBoundingClientRect();
+    let delta=0;
+    if(r.bottom>dockTop-12)delta=r.bottom-(dockTop-12);
+    else if(r.top<vTop+10)delta=r.top-(vTop+10);
+    if(Math.abs(delta)>2)window.scrollBy({top:delta,behavior:'smooth'});
+  }
+  function schedule(reveal){
+    if(raf)return;
+    raf=requestAnimationFrame(()=>{raf=0;placeDock();if(reveal)revealFocused()});
+  }
+  document.addEventListener('focusin',e=>{
+    if(!isField(e.target))return;
+    schedule(false);clearTimeout(settle);
+    // Даём iOS закончить анимацию клавиатуры; проверяем ещё раз после её подъёма.
+    settle=setTimeout(()=>{placeDock();revealFocused()},280);
+  },true);
+  document.addEventListener('focusout',()=>{
+    clearTimeout(settle);
+    setTimeout(()=>{if(!isField(document.activeElement)){dock.style.bottom='';document.documentElement.style.setProperty('--keyboardInset','0px');schedule(false)}},120);
+  },true);
+  if(vv){vv.addEventListener('resize',()=>schedule(isField(document.activeElement)));vv.addEventListener('scroll',()=>schedule(isField(document.activeElement)));}
+  window.addEventListener('resize',()=>schedule(isField(document.activeElement)));
+  // Повторная коррекция после открытия клавиатуры; только если поле всё ещё в фокусе.
+  window.addEventListener('orientationchange',()=>setTimeout(()=>schedule(isField(document.activeElement)),350));
+  placeDock();
 })();
 
 /* ─── 2. СИГНАЛ ОКОНЧАНИЯ ОТДЫХА ПРИ СВЁРНУТОМ ПРИЛОЖЕНИИ ─────────────────── */
