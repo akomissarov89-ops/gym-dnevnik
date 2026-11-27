@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--═══════════════════════════════════════════════════════════════════════════════
- ДНЕВНИК ТРЕНИРОВОК · PWA · v23
+ ДНЕВНИК ТРЕНИРОВОК · PWA · v27
  Клавиатура: автоматическое перемещение нижней панели и автопрокрутка отключены.
  Поле может оставаться за клавиатурой; пользователь прокручивает форму вручную.
  Остальные функции сборки v22 сохранены.
@@ -2303,7 +2303,7 @@ try{autoSnap()}catch(e){}
 <script>
 "use strict";
 /* ─── 1. КЛАВИАТУРА iOS: НАТИВНОЕ ПОВЕДЕНИЕ ───────────────────────────────
-   v23: отключено автоматическое перемещение dock и автопрокрутка формы.
+   v27: сохраняется положение страницы до фокуса и восстанавливается после blur.
    Клавиатура может перекрывать активное поле; пользователь прокручивает
    содержимое вручную. Никаких обработчиков visualViewport/focus для этого нет.
 */
@@ -2315,6 +2315,38 @@ try{autoSnap()}catch(e){}
 */
 (function(){
   const editable='input,textarea,select,[contenteditable="true"]';
+  /* Safari на iPhone иногда сдвигает document при появлении клавиатуры,
+     особенно когда поле находится у нижнего края. Запоминаем положение
+     страницы до фокуса и возвращаем его после blur/закрытия клавиатуры.
+     Никакой автопрокрутки к полю не выполняем. */
+  let pageY=null, restoreToken=0, restoring=false;
+  function restorePage(){
+    if(pageY===null||restoring)return;
+    restoring=true;
+    const y=pageY;
+    const apply=()=>{if(document.activeElement&&document.activeElement.matches&&document.activeElement.matches(editable))return;try{window.scrollTo(0,y)}catch(err){};};
+    apply();
+    requestAnimationFrame(()=>{apply();restoring=false;});
+    [80,220,420].forEach(ms=>setTimeout(apply,ms));
+    clearTimeout(restoreToken);
+    restoreToken=setTimeout(()=>{pageY=null;},500);
+  }
+  document.addEventListener('focusin',function(e){
+    if(e.target&&e.target.matches&&e.target.matches(editable)){
+      clearTimeout(restoreToken);
+      if(pageY===null)pageY=window.scrollY||window.pageYOffset||0;
+    }
+  },true);
+  document.addEventListener('focusout',function(e){
+    if(e.target&&e.target.matches&&e.target.matches(editable)){
+      setTimeout(()=>{if(!document.activeElement||!document.activeElement.matches||!document.activeElement.matches(editable))restorePage();},0);
+    }
+  },true);
+  if(window.visualViewport){
+    window.visualViewport.addEventListener('resize',function(){
+      if(pageY!==null&&!document.activeElement?.matches?.(editable))restorePage();
+    },{passive:true});
+  }
   document.addEventListener('pointerdown',function(e){
     const active=document.activeElement;
     if(!active||!active.matches||!active.matches(editable))return;
