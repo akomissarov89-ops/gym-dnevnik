@@ -35,7 +35,7 @@
 <link id="touchIcon" rel="apple-touch-icon" sizes="180x180" href="">
 <link id="favIcon" rel="icon" type="image/png" href="">
 <link id="manifestLink" rel="manifest" href="">
-<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+
 <style>
 :root{
 --bg:#08090b;--bg2:#0b0d0f;--surf:#111417;--surf2:#161a1d;--surf3:#1c2124;--overlay:#1a1f23;
@@ -732,7 +732,12 @@ function setsFromSeed(k){const s=SEED[k],o={};if(!s)return o;s.ex.forEach((a,ei)
 function snap(){return JSON.stringify({log:S.log,parked:S.parked,override:S.override,plan:S.plan,feel:S.feel,watch:S.watch,weights:S.weights,cardio:S.cardio,touched:S.touched,inbody:S.inbody,summary:S.summary,analyses:S.analyses,decisions:S.decisions})}
 function pushUndo(s){undoStack.push(s);if(undoStack.length>14)undoStack.shift()}
 function undo(){if(!undoStack.length)return toast('Нечего отменять',true);Object.assign(S,JSON.parse(undoStack.pop()));hydrateCoach();save();renderAll();toast('Действие отменено',true)}
+let saveTimer=0;
 function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+function queueSave(){clearTimeout(saveTimer);saveTimer=setTimeout(()=>{saveTimer=0;save()},350)}
+function flushSave(){if(saveTimer){clearTimeout(saveTimer);saveTimer=0;save()}}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')flushSave()});
+window.addEventListener('pagehide',flushSave);
 function hydrateCoach(){Object.keys(S.analyses||{}).forEach(k=>{ANALYSIS[k]=S.analyses[k]});
 (S.decisions||[]).forEach(d=>{const i=DECISIONS.findIndex(x=>x.t===d.t);if(i>=0)DECISIONS[i]=d;else DECISIONS.push(d)})}
 function load(){try{const raw=localStorage.getItem(KEY);if(raw){const p=JSON.parse(raw);if(p&&p.plan&&p.log)S=Object.assign(S,p)}}catch(e){}
@@ -867,9 +872,16 @@ let L=Object.assign({},LAY_DEF);
 try{const q=JSON.parse(localStorage.getItem(LAYKEY)||'null');if(q)L=Object.assign({},LAY_DEF,q)}catch(e){}
 function lStore(){try{localStorage.setItem(LAYKEY,JSON.stringify(L))}catch(e){}}
 const scrollEl=$('scroll'),hdrEl=document.querySelector('.hdr'),dockEl=document.querySelector('.dock'),contentEl=$('content');
+let layoutRaf=0;
+function queueLayout(){if(layoutRaf)return;layoutRaf=requestAnimationFrame(()=>{layoutRaf=0;layout()})}
 function cleanEmpties(){if(!L.clean||!contentEl)return;
 [].slice.call(contentEl.children).forEach(n=>{if((n.tagName==='DIV'||n.tagName==='SPAN')&&!n.attributes.length&&!n.innerHTML.trim())n.remove()})}
-function layout(){if(layoutBusy||!scrollEl||!hdrEl)return;layoutBusy=true;
+function layout(){
+/* Не пересчитываем вертикальные отступы во время редактирования: iOS меняет
+   visual viewport при показе клавиатуры, что иначе сдвигает весь контент. */
+const ae=document.activeElement;
+if(ae&&/^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName))return;
+if(layoutBusy||!scrollEl||!hdrEl)return;layoutBusy=true;
 const hb=hdrEl.getBoundingClientRect().bottom,dh=dockEl?dockEl.getBoundingClientRect().height:80;
 root.style.setProperty('--hdr',hb+'px');root.style.setProperty('--dock',dh+'px');
 root.style.setProperty('--fixTop',(hb+L.top)+'px');root.style.setProperty('--fixBot',(dh+L.bot)+'px');
@@ -888,11 +900,11 @@ function setDiag(id,v,ok){const d=$(id);if(!d)return;d.classList.toggle('warn',!
 d.querySelector('.v').textContent=v+' px';d.querySelector('.s').textContent=ok?'норма':'проверь'}
 function applyDens(d){if(d==='tight'){L.card=6;L.top=5;L.bot=10;L.rad=13}
 else if(d==='airy'){L.card=14;L.top=14;L.bot=22;L.rad=18}else{L.card=9;L.top=8;L.bot=14;L.rad=15}L.dens=d}
-if(window.ResizeObserver){const ro=new ResizeObserver(()=>layout());ro.observe(hdrEl);if(dockEl)ro.observe(dockEl)}
-if(window.MutationObserver){const mo=new MutationObserver(()=>layout());mo.observe(contentEl,{childList:true});mo.observe(hdrEl,{attributes:true,attributeFilter:['class','style']})}
-window.addEventListener('resize',()=>{sizeCanvas();drawStage();layout()});
-window.addEventListener('orientationchange',()=>setTimeout(()=>{sizeCanvas();drawStage();layout()},220));
-setInterval(layout,1500);
+if(window.ResizeObserver){const ro=new ResizeObserver(queueLayout);ro.observe(hdrEl);if(dockEl)ro.observe(dockEl)}
+if(window.MutationObserver){const mo=new MutationObserver(queueLayout);mo.observe(contentEl,{childList:true});mo.observe(hdrEl,{attributes:true,attributeFilter:['class','style']})}
+window.addEventListener('resize',()=>{sizeCanvas();drawStage();queueLayout()});
+window.addEventListener('orientationchange',()=>setTimeout(()=>{sizeCanvas();drawStage();queueLayout()},220));
+/* Периодический layout удалён: он пересчитывал отступы во время ввода. */
 /* ═══ ТАЙМЕР: БЕЗ АУДИОЭЛЕМЕНТА И БЕЗ MediaSession ═══ */
 const RT={mode:'idle',preset:150,endAt:0,left:150,auto:true,notified:false,ctx:null,iv:null,lastTick:-1};
 const CIRC=2*Math.PI*88;
@@ -935,7 +947,7 @@ function rtClose(){$('rtOverlay').classList.remove('show');rtPaint()}
 function rtLoop(){clearInterval(RT.iv);RT.iv=setInterval(()=>{if(RT.mode!=='running')return;
 const l=Math.ceil((RT.endAt-Date.now())/1000);if(l<=0){rtFinish();return}
 if(l!==RT.left){RT.left=l;rtPaint();if(l<=3&&l!==RT.lastTick){RT.lastTick=l;playTick()}
-if(l%5===0)rtStore()}},250)}
+if(l%5===0)rtStore()}},500)}
 function rtFinish(late){clearInterval(RT.iv);RT.iv=null;RT.mode='done';RT.left=0;RT.lastTick=-1;rtStore();
 beep('end');if(!RT.notified){RT.notified=true;notifyRest(late?'Отдых вышел, пока приложение было свёрнуто':'Следующий подход')}
 rtPaint();toast(late?'Отдых вышел '+late+' назад — следующий подход':'Отдых закончен — следующий подход',!!late);
@@ -1141,7 +1153,7 @@ return h}
 function ensureLog(){const k=S.date,res=resolve(k);if(!res.day)return null;
 if(!S.log[k])S.log[k]={day:res.day,sets:{},done:false,ts:Date.now()};S.log[k].day=res.day;return S.log[k]}
 function setCell(ei,si,f,val){const r=ensureLog();if(!r)return;const key=ei+'_'+si;if(!r.sets[key])r.sets[key]={w:'',r:''};
-const n=val===''?'':num(val);r.sets[key][f]=n==null?'':n;S.touched[S.date]=true;save()}
+const n=val===''?'':num(val);r.sets[key][f]=n==null?'':n;S.touched[S.date]=true;queueSave()}
 function exFilled(ei){const k=S.date,r=S.log[k],res=resolve(k);if(!r||!res.day)return false;
 return S.plan[res.day][ei].sets.every((s,si)=>{const x=r.sets[ei+'_'+si];if(!x)return false;const p=planVals(s);return num(x.w)!=null&&num(x.r)!=null&&num(x.w)===p.w&&num(x.r)===p.r})}
 function dayFilled(){const res=resolve(S.date);if(!res.day)return false;return S.plan[res.day].every((_,ei)=>exFilled(ei))}
@@ -1758,7 +1770,9 @@ for(let r=3;r<=6;r++){rowS(ws,r,n,st({}));sty(ws,r,0,st({font:{bold:true},alignm
 rowS(ws,6,n,OK());
 rows.forEach((r,i)=>{if(i>7&&r[0]&&r[1]===undefined)rowS(ws,i,n,r[0].length<28?HEAD():st({alignment:LEFT}))});
 return fin(ws,rows,n,[30,34,18,14,18,16])}
-function exportXLSX(){try{if(typeof XLSX==='undefined'||!XLSX.utils){toast('Библиотека Excel не загрузилась',true);return}
+let xlsxPromise=null;
+function ensureXLSX(){if(window.XLSX&&XLSX.utils)return Promise.resolve();if(xlsxPromise)return xlsxPromise; xlsxPromise=new Promise((resolve,reject)=>{const sc=document.createElement('script');sc.src='https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js';sc.onload=()=>resolve();sc.onerror=()=>{xlsxPromise=null;reject(new Error('XLSX load failed'))};document.head.appendChild(sc)});return xlsxPromise}
+async function exportXLSX(){try{await ensureXLSX();if(typeof XLSX==='undefined'||!XLSX.utils){toast('Библиотека Excel не загрузилась',true);return}
 const wb=XLSX.utils.book_new();
 [1,2,3].forEach(d=>XLSX.utils.book_append_sheet(wb,sheetDay(d),'День '+d));
 XLSX.utils.book_append_sheet(wb,sheetJournal(),'Журнал подходов');XLSX.utils.book_append_sheet(wb,sheetProgress(),'Прогресс');
@@ -1768,7 +1782,7 @@ XLSX.utils.book_append_sheet(wb,sheetInBody(),'InBody');XLSX.utils.book_append_s
 XLSX.utils.book_append_sheet(wb,sheetSummary(),'Сводка');
 XLSX.writeFile(wb,'plan_trenirovok_'+S.date+'.xlsx');toast('Excel скачан · '+wb.SheetNames.length+' листов');buzz(15);beep('ok')}
 catch(e){toast('Ошибка выгрузки: '+(e&&e.message?e.message:e),true)}}
-function importXLSX(file){const fr=new FileReader();
+async function importXLSX(file){try{await ensureXLSX()}catch(e){toast('Библиотека Excel не загрузилась',true);return}const fr=new FileReader();
 fr.onload=ev=>{try{const wb=XLSX.read(new Uint8Array(ev.target.result),{type:'array'}),s=snap();let cnt=0,wn=0,fn=0,cn=0;
 [1,2,3].forEach(d=>{const ws=wb.Sheets['День '+d];if(!ws)return;
 const j=XLSX.utils.sheet_to_json(ws,{header:1}),hi=j.findIndex(r=>r&&r[0]==='Упражнение');if(hi<0)return;
@@ -1937,9 +1951,10 @@ const row=i.closest('.set');paintSet(+i.dataset.e,+i.dataset.s,row);
 const card=i.closest('.card'),ei=+i.dataset.e,btn=card.querySelector('[data-plan]'),f=exFilled(ei);
 if(btn){btn.textContent=f?'✕ Убрать план':'⚡ По максимуму';btn.className='btn btn-plan'+(f?' clear':'')}
 paintMeters();renderDock()}
-if(i.id==='feelNote'){const f=S.feel[S.date]||(S.feel[S.date]={});f.note=i.value;save()}});
+if(i.id==='feelNote'){const f=S.feel[S.date]||(S.feel[S.date]={});f.note=i.value;queueSave()}});
 scrollEl.addEventListener('change',e=>{if(e.target.classList.contains('inp')){paintCal();renderHeader()}});
 scrollEl.addEventListener('focusin',e=>{if(e.target.classList.contains('inp'))e.target.select()});
+scrollEl.addEventListener('focusout',()=>{requestAnimationFrame(()=>layout())});
 document.addEventListener('keydown',e=>{
 if(e.key==='Escape'){if($('rtOverlay').classList.contains('show'))return rtClose();closeSheet()}
 if(e.code==='Space'&&$('rtOverlay').classList.contains('show')){e.preventDefault();RT.mode==='running'?rtPause():rtResume()}});
@@ -2291,11 +2306,9 @@ try{autoSnap()}catch(e){}
      Идёт после основного <script>. Логику основного блока не перезаписывает:
      только слушает события и обёртывает уже существующие глобальные функции.
 
-     1. КЛАВИАТУРА. iOS при открытии клавиатуры сама крутит документ, из-за чего
-        заполняемое поле уезжает вверх. Здесь позиция скролла фиксируется на момент
-        касания и возвращается обратно; сдвигаемся ровно на столько, на сколько поле
-        реально оказалось под клавиатурой (или под доком), и не больше.
-        Работает через visualViewport — закрывает и Safari, и standalone-PWA.
+     1. КЛАВИАТУРА. Не перехватываем прокрутку при открытии клавиатуры:
+        iOS сама управляет visualViewport. Принудительные scrollTo и отложенные
+        корректировки отключены, чтобы не конфликтовать с системным фокусом.
 
      2. СИГНАЛ ОТДЫХА В ФОНЕ. v19 ждал setInterval, а в свёрнутом состоянии iOS
         таймеры ставит на паузу → сигнал приходил только при возврате в приложение.
@@ -2306,105 +2319,14 @@ try{autoSnap()}catch(e){}
      ═══════════════════════════════════════════════════════════════════════════════ -->
 <script>
 "use strict";
-/* ─── 1. КЛАВИАТУРА: ПОЛЕ ВВОДА ОСТАЁТСЯ НА МЕСТЕ ─────────────────────────── */
+/* ─── 1. КЛАВИАТУРА: НАТИВНОЕ УПРАВЛЕНИЕ iOS ───────────────────────────
+   Не перехватываем visualViewport и не вызываем scrollTo при фокусе.
+   На iOS эти действия конфликтуют с системным перемещением viewport при
+   открытии клавиатуры и могут вызывать скачки и потерю фокуса.
+   Оставляем браузеру управление клавиатурой и прокруткой.
+*/
 (function(){
-  const vv=window.visualViewport;
-  /* Раньше следим только за .inp — это вес и повторы на «Тренировке». На
-     «Самочувствии» другие поля: textarea.ta (заметка), голые input внутри .fld
-     (вес, кардио — класса нет вообще) и input[type=date]. Теперь следим за любым
-     полем, которое вызывает клавиатуру; кнопки, чекбоксы и ползунки пропускаем. */
-  const SKIP={button:1,submit:1,reset:1,checkbox:1,radio:1,range:1,file:1,hidden:1,color:1,image:1};
-  function isField(el){
-    if(!el||!el.tagName)return false;
-    if(el.isContentEditable)return true;
-    const t=el.tagName;
-    if(t==='TEXTAREA'||t==='SELECT')return !el.disabled&&!el.readOnly;
-    if(t==='INPUT')return !el.disabled&&!SKIP[String(el.type||'text').toLowerCase()];
-    return false;
-  }
-  const KB={on:false,base:0,y:0,el:null,anim:0};
-  /* ГЛАДКОСТЬ. Два раздельных механизма:
-     pin() — мгновенный возврат, когда клавиатура сдвинула документ. Пишет не
-     чаще одного раза за кадр: раньше scrollTo вызывался на каждом событии
-     visualViewport.scroll, то есть по нескольку раз за кадр, и спорил с
-     собственной анимацией iOS — отсюда дёрганье.
-     glideTo() — плавный подвод поля. Свой твининг, а не behavior:'smooth':
-     иначе собственный pin перехватывал бы анимацию уже на следующем кадре. */
-  let lastPin=0;
-  function pin(){
-    if(!KB.on||KB.anim)return;
-    if(Math.abs(window.scrollY-KB.y)<2)return;
-    const now=performance.now();
-    if(now-lastPin<16)return;
-    lastPin=now; window.scrollTo(0,KB.y);
-  }
-  /* Сколько документ вообще может прокрутиться. Нужна, чтобы не дёргать scrollTo,
-     когда поле уже уперлось в низ страницы и выше его не поднять в принципе —
-     иначе твининг все 190 мс пишет одно и то же значение. */
-  function maxScroll(){
-    const de=document.documentElement,b=document.body;
-    const h=Math.max(de?de.scrollHeight:0,b?b.scrollHeight:0);
-    return Math.max(0,h-(window.innerHeight||9999));
-  }
-  function glideTo(y,ms){
-    y=Math.min(y,maxScroll());
-    const from=window.scrollY,d=y-from;
-    if(KB.anim){cancelAnimationFrame(KB.anim);KB.anim=0;}
-    if(Math.abs(d)<3){if(d!==0)window.scrollTo(0,y);return;}
-    const t0=performance.now();
-    (function step(now){
-      const p=Math.min(1,(now-t0)/ms),e=1-Math.pow(1-p,3);
-      window.scrollTo(0,Math.round(from+d*e));
-      KB.anim=(p<1)?requestAnimationFrame(step):0;
-    })(t0);
-  }
-  function limit(){
-    const vh=window.innerHeight||9999;
-    const visB=(vv?((vv.offsetTop+vv.height)||vh):vh);
-    const d=document.querySelector('.dock');
-    return Math.min(visB,d?d.getBoundingClientRect().top:visB)-10;
-  }
-  /* Цель абсолютная: нижний край поля к границе видимой зоны. Повторный вызов
-     ничего не добавляет, а если документ дальше не скроллится — значение не растёт.
-     Довод всегда плавный. Мгновенный скачок на первой же точке делал твининг
-     бессмысленным: поле уже стояло на месте раньше, чем анимация успевала начаться. */
-  function nudge(){
-    const el=KB.el; if(!el||!KB.on||!el.isConnected)return;
-    const r=el.getBoundingClientRect(),lim=limit();
-    if(r.bottom<=lim)return;
-    const t=Math.max(KB.base,Math.round(window.scrollY+(r.bottom-lim)));
-    if(t===KB.y&&Math.abs(window.scrollY-t)<2)return;
-    KB.y=t; glideTo(t,190);
-  }
-  let preY=null,preT=0;
-  document.addEventListener('pointerdown',e=>{
-    const el=e.target.closest?e.target.closest('input,textarea,select,[contenteditable]'):null;
-    if(el){ preY=window.scrollY; preT=Date.now(); }
-  },true);
-  document.addEventListener('focusin',e=>{
-    if(!isField(e.target))return;
-    const again=KB.on&&KB.el===e.target;
-    KB.on=true; KB.el=e.target;
-    /* При повторном фокусе на то же поле базу не переписываем: иначе собственная
-       правка станет новой точкой отсчёта и поле уползёт ещё выше. */
-    if(!again)KB.base=KB.y=(preY!=null&&Date.now()-preT<900)?preY:window.scrollY;
-    /* Клавиатура встаёт не мгновенно: ловим её в нескольких точках, каждая —
-       отмена чужого сдвига плюс плавный довод поля к краю видимой зоны. */
-    [0,50,120,260,460,700].forEach(t=>setTimeout(()=>{ pin(); if(t>=120) nudge(); },t));
-  },true);
-  /* В textarea перенос строк увеличивает поле — низ уезжает под клавиатуру. */
-  document.addEventListener('input',e=>{ if(KB.on&&e.target===KB.el)nudge(); },true);
-  document.addEventListener('focusout',e=>{
-    const to=e.relatedTarget;
-    if(to&&isField(to)){ KB.el=to; KB.base=KB.y=window.scrollY; preY=null; return; }
-    KB.on=false; KB.el=null;
-    if(KB.anim){cancelAnimationFrame(KB.anim);KB.anim=0;}
-  },true);
-  if(vv){
-    vv.addEventListener('resize',()=>{ if(!KB.on)return; pin(); requestAnimationFrame(()=>{ pin(); nudge(); }); });
-    vv.addEventListener('scroll',pin);
-  }
-  window.addEventListener('resize',()=>{ if(KB.on) pin(); });
+  // Намеренно без обработчиков focus/scroll/visualViewport.
 })();
 
 /* ─── 2. СИГНАЛ ОКОНЧАНИЯ ОТДЫХА ПРИ СВЁРНУТОМ ПРИЛОЖЕНИИ ─────────────────── */
@@ -2456,12 +2378,49 @@ try{autoSnap()}catch(e){}
   window.rtPause=function(){ disarm(); return oPause.apply(this,arguments) };
   window.rtStop=function(c){ disarm(); return oStop.apply(this,arguments) };
   window.rtAdd=function(d){ disarm(); oAdd.apply(this,arguments); if(RT.mode==='running') arm(); };
+  let wasHidden=false, resumePending=false, returnSoundPending=false;
   document.addEventListener('visibilitychange',()=>{
-    if(document.visibilityState!=='visible')return;
+    if(document.visibilityState!=='visible'){
+      wasHidden=true;
+      return;
+    }
     const c=(typeof AC!=='undefined')?AC:null;
-    if(c&&c.state==='suspended'){ try{c.resume()}catch(e){} }
-    if(RT.mode==='running'&&!RT.schedAt) arm();
+    // iOS may suspend Web Audio in the background. Resume it, then re-arm
+    // the rest cue against the current deadline (never the stale audio clock).
+    resumePending=true;
+    if(wasHidden&&RT.mode==='done'&&S.sound)returnSoundPending=true;
+    const recover=()=>{
+      resumePending=false;
+      if(RT.mode==='running'){
+        try{stopLive()}catch(e){}
+        arm();
+      } else if(returnSoundPending&&S.sound){
+        returnSoundPending=false;
+        try{playMelody()}catch(e){}
+      }
+    };
+    if(c&&c.state!=='running'){
+      try{const promise=c.resume(); if(promise&&promise.then)promise.then(recover).catch(()=>{});else recover();}
+      catch(e){}
+    } else recover();
+    wasHidden=false;
   });
+  // On iOS, resume() can be rejected until the next user gesture.
+  // Retry on interaction so sound returns without requiring an app restart.
+  function resumeOnGesture(){
+    if(!resumePending)return;
+    const c=(typeof AC!=='undefined')?AC:null;
+    if(!c){resumePending=false;return}
+    try{const promise=c.resume(); if(promise&&promise.then)promise.then(()=>{
+      resumePending=false;
+      if(RT.mode==='running'){try{stopLive()}catch(e){} arm();}
+      else if(returnSoundPending&&S.sound){returnSoundPending=false;try{playMelody()}catch(e){}}
+    }).catch(()=>{});}
+    catch(e){}
+  }
+  document.addEventListener('pointerdown',resumeOnGesture,true);
+  document.addEventListener('touchend',resumeOnGesture,true);
+  document.addEventListener('keydown',resumeOnGesture,true);
   if(RT.mode==='running') arm();
 })();
 </script>
