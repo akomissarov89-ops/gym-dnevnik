@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--═══════════════════════════════════════════════════════════════════════════════
- ДНЕВНИК ТРЕНИРОВОК · PWA · v29
+ ДНЕВНИК ТРЕНИРОВОК · PWA · v31
  Клавиатура: внутренний список учитывает видимую область; активное поле прокручивается внутри списка.
  Остальные функции сборки v22 сохранены.
 ══════════════════════════════════════════════════════════════════════════════-->
@@ -2301,105 +2301,84 @@ try{autoSnap()}catch(e){}
      ═══════════════════════════════════════════════════════════════════════════════ -->
 <script>
 "use strict";
-/* ─── 1. КЛАВИАТУРА iOS: НАТИВНОЕ ПОВЕДЕНИЕ ───────────────────────────────
-   v29: список остаётся между шапкой и доком; не уменьшаем его высоту повторно под клавиатуру, если Safari уже сжал visual viewport.
-   При появлении клавиатуры учитываем visualViewport и прокручиваем активное поле
-   только внутри списка, не меняя положение документа и закреплённых элементов.
-*/
-
-/* ─── 1a. ЗАКРЫТИЕ КЛАВИАТУРЫ ПРИ КАСАНИИ ВНЕ ПОЛЯ ────────────────────────
-   На iOS клавиатура остаётся открытой, пока поле ввода в фокусе. При касании
-   другой области дневника снимаем фокус; само действие (кнопка/скролл) не
-   отменяем. Не трогаем переходы между полями ввода и системные элементы.
+/* ─── 1. КЛАВИАТУРА iOS: ВНУТРЕННЯЯ ПРОКРУТКА ───────────────────────────
+   Оставляем высоту fixed-layout и закреплённые панели неизменными. Когда
+   клавиатура закрывает низ списка, добавляем прокручиваемый запас внутри него;
+   поле и последнее упражнение можно поднять над клавиатурой без второго
+   уменьшения viewport и без прокрутки документа.
 */
 (function(){
   const editable='input,textarea,select,[contenteditable="true"]';
-  /* Safari на iPhone иногда сдвигает document при появлении клавиатуры,
-     особенно когда поле находится у нижнего края. Запоминаем положение
-     страницы до фокуса и возвращаем его после blur/закрытия клавиатуры.
-     Никакой автопрокрутки к полю не выполняем. */
-  let pageY=null, restoreToken=0, restoring=false;
   const root=document.documentElement, scroller=document.getElementById('scroll');
-  let keyboardOpen=false, focusTimer=0;
-  function viewportInset(){
-    if(!window.visualViewport){root.style.setProperty('--kbInset','0px');return 0;}
+  let keyboardOpen=false, focusTimer=0, restoreToken=0, pageY=null, listTop=null;
+  function activeEditable(){const e=document.activeElement;return !!(e&&e.matches&&e.matches(editable));}
+  function viewport(){
     const vv=window.visualViewport;
-    const inset=Math.max(0,Math.round(window.innerHeight-vv.height-vv.offsetTop));
-    root.style.setProperty('--kbInset',inset+'px');
-    keyboardOpen=inset>100;
-    return inset;
+    return vv?{top:vv.offsetTop,bottom:vv.offsetTop+vv.height,height:vv.height}:{top:0,bottom:window.innerHeight,height:window.innerHeight};
+  }
+  function updateKeyboard(){
+    const v=viewport();
+    keyboardOpen=!!window.visualViewport&&window.innerHeight-v.height-v.top>100;
+    if(scroller){
+      const sr=scroller.getBoundingClientRect();
+      const dock=document.querySelector('.dock');
+      const dockTop=dock?dock.getBoundingClientRect().top:window.innerHeight;
+      /* Не меняем top/bottom/height контейнера: только запас прокрутки,
+         необходимый если клавиатура перекрывает список или нижнюю панель. */
+      const visibleBottom=Math.min(v.bottom,dockTop);
+      const covered=Math.max(0,Math.ceil(sr.bottom-visibleBottom));
+      const base=parseFloat(getComputedStyle(root).getPropertyValue('--fixBot'))||14;
+      scroller.style.paddingBottom=(base+covered+24)+'px';
+    }
+    return keyboardOpen;
   }
   function revealActive(){
-    const el=document.activeElement;
-    if(!scroller||!el||!el.matches||!el.matches(editable)||!scroller.contains(el))return;
-    const vv=window.visualViewport;
-    const sr=scroller.getBoundingClientRect();
-    /* Visual viewport and fixed elements can settle over several frames on iOS.
-       Use the actual visible intersection, then change only the exercise scroller. */
-    const visibleTop=Math.max(sr.top,vv?vv.offsetTop:0);
-    const visibleBottom=Math.min(sr.bottom,vv?vv.offsetTop+vv.height:window.innerHeight);
-    const r=el.getBoundingClientRect(), margin=24;
+    if(!scroller||!activeEditable()||!scroller.contains(document.activeElement))return;
+    updateKeyboard();
+    const v=viewport(), sr=scroller.getBoundingClientRect();
+    const dock=document.querySelector('.dock');
+    const top=Math.max(sr.top,v.top), bottom=Math.min(sr.bottom,v.bottom,dock?dock.getBoundingClientRect().top:window.innerHeight);
+    const r=document.activeElement.getBoundingClientRect(), margin=18;
     let delta=0;
-    if(r.bottom>visibleBottom-margin)delta=r.bottom-(visibleBottom-margin);
-    else if(r.top<visibleTop+margin)delta=r.top-(visibleTop+margin);
-    if(Math.abs(delta)>1 && scroller.scrollHeight>scroller.clientHeight+1){
-      scroller.scrollTop+=delta;
+    if(r.bottom>bottom-margin)delta=r.bottom-(bottom-margin);
+    else if(r.top<top+margin)delta=r.top-(top+margin);
+    if(Math.abs(delta)>1)scroller.scrollTop+=delta;
+  }
+  function scheduleReveal(){[0,80,180,320,500].forEach(ms=>setTimeout(()=>requestAnimationFrame(revealActive),ms));}
+  function restoreScreen(){
+    if(activeEditable())return;
+    updateKeyboard();
+    if(scroller&&listTop!==null)scroller.scrollTop=listTop;
+    if(pageY!==null&&Math.abs((window.scrollY||window.pageYOffset||0)-pageY)>2){
+      try{window.scrollTo(0,pageY)}catch(err){}
     }
-  }
-  function scheduleReveal(){
-    [0,60,140,260,420].forEach(ms=>setTimeout(()=>requestAnimationFrame(revealActive),ms));
-  }
-  function syncKeyboard(){
-    viewportInset();
-    /* Wait for iOS to finish keyboard animation/viewport resize. */
-    scheduleReveal();
-  }
-  function restorePage(){
-    if(pageY===null||restoring)return;
-    restoring=true;
-    const y=pageY;
-    const apply=()=>{if(document.activeElement&&document.activeElement.matches&&document.activeElement.matches(editable))return;try{window.scrollTo(0,y)}catch(err){};};
-    apply();
-    requestAnimationFrame(()=>{apply();restoring=false;});
-    [80,220,420].forEach(ms=>setTimeout(apply,ms));
     clearTimeout(restoreToken);
-    restoreToken=setTimeout(()=>{pageY=null;},500);
+    restoreToken=setTimeout(()=>{pageY=null;listTop=null;},450);
   }
   document.addEventListener('focusin',function(e){
     if(e.target&&e.target.matches&&e.target.matches(editable)){
-      clearTimeout(focusTimer);
-      focusTimer=setTimeout(syncKeyboard,80);
-      scheduleReveal();
-      clearTimeout(restoreToken);
+      clearTimeout(focusTimer);clearTimeout(restoreToken);
       if(pageY===null)pageY=window.scrollY||window.pageYOffset||0;
+      if(listTop===null&&scroller)listTop=scroller.scrollTop;
+      focusTimer=setTimeout(()=>{updateKeyboard();scheduleReveal();},70);
+      scheduleReveal();
     }
   },true);
   document.addEventListener('focusout',function(e){
-    if(e.target&&e.target.matches&&e.target.matches(editable)){
-      setTimeout(()=>{if(!document.activeElement||!document.activeElement.matches||!document.activeElement.matches(editable)){keyboardOpen=false;root.style.setProperty('--kbInset','0px');restorePage();}},0);
-    }
+    if(e.target&&e.target.matches&&e.target.matches(editable))setTimeout(()=>{if(!activeEditable())restoreScreen();},80);
   },true);
   if(window.visualViewport){
-    window.visualViewport.addEventListener('resize',function(){
-      if(document.activeElement&&document.activeElement.matches&&document.activeElement.matches(editable))syncKeyboard();
-      else {keyboardOpen=false;root.style.setProperty('--kbInset','0px');if(pageY!==null)restorePage();}
-    },{passive:true});
-    window.visualViewport.addEventListener('scroll',()=>{if(keyboardOpen)scheduleReveal()},{passive:true});
+    window.visualViewport.addEventListener('resize',()=>{if(activeEditable()){updateKeyboard();scheduleReveal()}else restoreScreen()},{passive:true});
+    window.visualViewport.addEventListener('scroll',()=>{if(activeEditable())scheduleReveal()},{passive:true});
   }
+  window.addEventListener('resize',()=>{if(activeEditable()){updateKeyboard();scheduleReveal()}else updateKeyboard()},{passive:true});
   document.addEventListener('pointerdown',function(e){
     const active=document.activeElement;
     if(!active||!active.matches||!active.matches(editable))return;
-    const target=e.target&&e.target.closest?e.target.closest(editable):null;
-    if(target)return;
-    try{active.blur();}catch(err){}
+    if(e.target&&e.target.closest&&e.target.closest(editable))return;
+    try{active.blur()}catch(err){}
   },true);
-  document.addEventListener('keydown',function(e){
-    if(e.key!=='Escape')return;
-    const active=document.activeElement;
-    if(active&&active.matches&&active.matches(editable)){
-      active.blur();
-    }
-  },true);
+  document.addEventListener('keydown',function(e){if(e.key==='Escape'&&activeEditable())document.activeElement.blur()},true);
 })();
 
 /* ─── 2. СИГНАЛ ОКОНЧАНИЯ ОТДЫХА ПРИ СВЁРНУТОМ ПРИЛОЖЕНИИ ─────────────────── */
