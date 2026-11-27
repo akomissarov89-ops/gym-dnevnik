@@ -2330,14 +2330,30 @@ try{autoSnap()}catch(e){}
     return inset;
   }
   function revealActive(){
-    const el=document.activeElement;if(!keyboardOpen||!scroller||!el||!el.matches||!el.matches(editable)||!scroller.contains(el))return;
-    const r=el.getBoundingClientRect(),sr=scroller.getBoundingClientRect();
-    const vv=window.visualViewport, visibleBottom=Math.min(sr.bottom,vv?vv.offsetTop+vv.height:window.innerHeight);
-    const margin=18;
-    if(r.bottom>visibleBottom-margin)scroller.scrollTop+=r.bottom-(visibleBottom-margin);
-    else if(r.top<sr.top+margin)scroller.scrollTop-=sr.top+margin-r.top;
+    const el=document.activeElement;
+    if(!scroller||!el||!el.matches||!el.matches(editable)||!scroller.contains(el))return;
+    const vv=window.visualViewport;
+    const sr=scroller.getBoundingClientRect();
+    /* Visual viewport and fixed elements can settle over several frames on iOS.
+       Use the actual visible intersection, then change only the exercise scroller. */
+    const visibleTop=Math.max(sr.top,vv?vv.offsetTop:0);
+    const visibleBottom=Math.min(sr.bottom,vv?vv.offsetTop+vv.height:window.innerHeight);
+    const r=el.getBoundingClientRect(), margin=24;
+    let delta=0;
+    if(r.bottom>visibleBottom-margin)delta=r.bottom-(visibleBottom-margin);
+    else if(r.top<visibleTop+margin)delta=r.top-(visibleTop+margin);
+    if(Math.abs(delta)>1 && scroller.scrollHeight>scroller.clientHeight+1){
+      scroller.scrollTop+=delta;
+    }
   }
-  function syncKeyboard(){viewportInset();requestAnimationFrame(()=>requestAnimationFrame(revealActive));}
+  function scheduleReveal(){
+    [0,60,140,260,420].forEach(ms=>setTimeout(()=>requestAnimationFrame(revealActive),ms));
+  }
+  function syncKeyboard(){
+    viewportInset();
+    /* Wait for iOS to finish keyboard animation/viewport resize. */
+    scheduleReveal();
+  }
   function restorePage(){
     if(pageY===null||restoring)return;
     restoring=true;
@@ -2352,7 +2368,8 @@ try{autoSnap()}catch(e){}
   document.addEventListener('focusin',function(e){
     if(e.target&&e.target.matches&&e.target.matches(editable)){
       clearTimeout(focusTimer);
-      focusTimer=setTimeout(syncKeyboard,180);
+      focusTimer=setTimeout(syncKeyboard,80);
+      scheduleReveal();
       clearTimeout(restoreToken);
       if(pageY===null)pageY=window.scrollY||window.pageYOffset||0;
     }
@@ -2367,7 +2384,7 @@ try{autoSnap()}catch(e){}
       if(document.activeElement&&document.activeElement.matches&&document.activeElement.matches(editable))syncKeyboard();
       else {keyboardOpen=false;root.style.setProperty('--kbInset','0px');if(pageY!==null)restorePage();}
     },{passive:true});
-    window.visualViewport.addEventListener('scroll',()=>{if(keyboardOpen)requestAnimationFrame(revealActive)},{passive:true});
+    window.visualViewport.addEventListener('scroll',()=>{if(keyboardOpen)scheduleReveal()},{passive:true});
   }
   document.addEventListener('pointerdown',function(e){
     const active=document.activeElement;
