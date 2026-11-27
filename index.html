@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--═══════════════════════════════════════════════════════════════════════════════
- ДНЕВНИК ТРЕНИРОВОК · PWA · v28
+ ДНЕВНИК ТРЕНИРОВОК · PWA · v29
  Клавиатура: внутренний список учитывает видимую область; активное поле прокручивается внутри списка.
  Остальные функции сборки v22 сохранены.
 ══════════════════════════════════════════════════════════════════════════════-->
@@ -114,7 +114,7 @@ body.cal-collapsed .cal-wrap{display:none}
 .chip.on.c2{background:linear-gradient(140deg,var(--cyan),#3e9bd6)}
 .chip.on.c3{background:linear-gradient(140deg,var(--violet),#7a63c4)}
 .chip.on.c0{background:linear-gradient(140deg,#9a8cf5,#6d5bc4)}
-.scroll{position:fixed;z-index:2;top:var(--hdr);bottom:calc(var(--dock) + var(--kbInset));left:0;right:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior-y:contain;padding:var(--fixTop) var(--dSide) var(--fixBot);max-width:720px;margin:0 auto;min-height:0;scroll-padding-block:16px 24px}
+.scroll{position:fixed;z-index:2;top:var(--hdr);bottom:var(--dock);left:0;right:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior-y:contain;padding:var(--fixTop) var(--dSide) var(--fixBot);max-width:720px;margin:0 auto;min-height:0;scroll-padding-block:16px 24px}
 .sess-line{display:flex;align-items:center;gap:7px;margin-bottom:10px}
 .sess-line .t{font-size:14px;font-weight:750;letter-spacing:-.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .sess-line .s{font-size:10.5px;color:var(--txt3);font-family:var(--mono);flex:none}
@@ -2302,7 +2302,7 @@ try{autoSnap()}catch(e){}
 <script>
 "use strict";
 /* ─── 1. КЛАВИАТУРА iOS: НАТИВНОЕ ПОВЕДЕНИЕ ───────────────────────────────
-   v28: основной список — отдельная прокручиваемая область между шапкой и доком.
+   v29: список остаётся между шапкой и доком; не уменьшаем его высоту повторно под клавиатуру, если Safari уже сжал visual viewport.
    При появлении клавиатуры учитываем visualViewport и прокручиваем активное поле
    только внутри списка, не меняя положение документа и закреплённых элементов.
 */
