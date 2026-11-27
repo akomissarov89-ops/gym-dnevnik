@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <!--═══════════════════════════════════════════════════════════════════════════════
- ДНЕВНИК ТРЕНИРОВОК · PWA · v20
+ ДНЕВНИК ТРЕНИРОВОК · PWA · v21
  Что изменено против v19:
- 1. КЛАВИАТУРА БОЛЬШЕ НЕ ДВИГАЕТ ПОЛЯ. При заполнении веса и повторов iOS
-    прокручивала документ, и поле уезжало вверх. Позиция скролла фиксируется на
-    момент касания и возвращается; сдвиг происходит только если поле реально
-    оказалось под клавиатурой — ровно на недостающие пиксели. visualViewport.
+ 1. КЛАВИАТУРА БОЛЬШЕ НЕ ДВИГАЕТ ПОЛЯ — НА ВСЕХ ВКЛАДКАХ. При заполнении веса и
+    повторов iOS прокручивала документ, и поле уезжало вверх. Позиция скролла
+    фиксируется на момент касания и возвращается; сдвиг происходит только если
+    поле реально оказалось под клавиатурой — ровно на недостающие пиксели.
+    visualViewport. В v21 действие распространено на «Самочувствие»: заметка
+    (textarea), поля веса и кардио (input без класса) и выбор даты.
  2. СИГНАЛ ОКОНЧАНИЯ ОТДЫХА РАБОТАЕТ В СВЁРНУТОМ ПРИЛОЖЕНИИ. Мелодия ставится на
     аудио-часы AudioContext заранее, на точный момент конца отдыха, поэтому
     спящие в фоне JS-таймеры больше не нужны. Тихий keep-alive не даёт контексту
@@ -14,6 +16,9 @@
  3. ВСТРОЕН ПАТЧ «ИСТОРИЧЕСКИЕ ПЛАНЫ + ЧЕСТНЫЙ ПРОГРЕСС»: снимок плана на каждую
     дату, колонка «Источник плана» в журнале, честный Δ в «Прогрессе», шторка 🗓.
     Больше ничего доклеивать руками не нужно — файл самодостаточен.
+ 4. ПЛАВНОСТЬ. Правки скролла идут не чаще одного раза за кадр, поле подводится к
+    клавиатуре твинингом вместо мгновенного скачка, а переключение вкладок
+    «Тренировка ↔ Самочувствие» показало короткое появление вместо вспышки.
  Остальное v19 сохранено: 📥 единый блок тренера, 6 мелодий, плотные отступы,
  читаемые плановые веса, календарь до 2027, иконка-гантеля, Excel на 12 листов.
 ══════════════════════════════════════════════════════════════════════════════-->
@@ -108,6 +113,13 @@ body.cal-collapsed .cal-wrap{display:none}
 .tab.on{background:var(--limeT);border-color:var(--limeB);color:var(--lime2)}
 .tab .bdg{font-size:8.5px;font-weight:700;padding:1px 4px;border-radius:4px;background:var(--cyanT);color:var(--cyan);font-family:var(--mono)}
 .tab.on .bdg{background:rgba(178,213,86,.12);color:var(--lime2)}
+/* Плавная смена вкладки. Раньше контент менялся целиком одним innerHTML,
+   и «Самочувствие» возникало мгновенной вспышкой на пустом месте.
+   fill-mode намеренно none: с forwards застывший transform перебивал бы
+   inline-transform, которым карточки перетаскиваются за ручку. */
+@keyframes riseIn{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
+#content.swap>*{animation:riseIn .19s cubic-bezier(.22,.61,.36,1)}
+@media (prefers-reduced-motion:reduce){#content.swap>*{animation:none}}
 .chips{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px;padding:0 12px 9px}
 .chip{height:34px;min-width:0;border-radius:17px;background:var(--surf);border:1px solid var(--line);color:var(--txt3);display:flex;align-items:center;justify-content:center;gap:4px;font-size:11px;font-weight:700;cursor:pointer;transition:.14s;padding:0 4px;font-family:var(--sans);position:relative}
 .chip:active{transform:scale(.96)}
@@ -1883,7 +1895,7 @@ $('sheetX').onclick=closeSheet;$('scrim').onclick=closeSheet;
 $('calStrip').addEventListener('click',e=>{const b=e.target.closest('[data-go]');if(b)go(b.dataset.go)});
 $('calStrip').addEventListener('scroll',onCalScroll,{passive:true});
 $('dayChips').onclick=e=>{const b=e.target.closest('[data-day]');if(b)assign(+b.dataset.day)};
-document.querySelector('.tabs').onclick=e=>{const b=e.target.closest('[data-tab]');if(b){S.tab=b.dataset.tab;save();renderAll()}};
+document.querySelector('.tabs').onclick=e=>{const b=e.target.closest('[data-tab]');if(b){S.tab=b.dataset.tab;save();renderAll();const c=$('content');if(c){c.classList.remove('swap');void c.offsetWidth;c.classList.add('swap');clearTimeout(c._sw);c._sw=setTimeout(()=>c.classList.remove('swap'),300)}}};
 $('sheetFoot').onclick=e=>{if(e.target.closest('[data-close]'))return closeSheet();
 if(e.target.closest('[data-export]')){closeSheet();return exportXLSX()}
 if(e.target.closest('[data-del]'))return deleteSession();
@@ -2297,8 +2309,55 @@ try{autoSnap()}catch(e){}
 /* ─── 1. КЛАВИАТУРА: ПОЛЕ ВВОДА ОСТАЁТСЯ НА МЕСТЕ ─────────────────────────── */
 (function(){
   const vv=window.visualViewport;
-  const KB={on:false,base:0,y:0,el:null};
-  function pin(){ if(!KB.on)return; if(Math.round(window.scrollY)!==Math.round(KB.y)) window.scrollTo(0,KB.y); }
+  /* Раньше следим только за .inp — это вес и повторы на «Тренировке». На
+     «Самочувствии» другие поля: textarea.ta (заметка), голые input внутри .fld
+     (вес, кардио — класса нет вообще) и input[type=date]. Теперь следим за любым
+     полем, которое вызывает клавиатуру; кнопки, чекбоксы и ползунки пропускаем. */
+  const SKIP={button:1,submit:1,reset:1,checkbox:1,radio:1,range:1,file:1,hidden:1,color:1,image:1};
+  function isField(el){
+    if(!el||!el.tagName)return false;
+    if(el.isContentEditable)return true;
+    const t=el.tagName;
+    if(t==='TEXTAREA'||t==='SELECT')return !el.disabled&&!el.readOnly;
+    if(t==='INPUT')return !el.disabled&&!SKIP[String(el.type||'text').toLowerCase()];
+    return false;
+  }
+  const KB={on:false,base:0,y:0,el:null,anim:0};
+  /* ГЛАДКОСТЬ. Два раздельных механизма:
+     pin() — мгновенный возврат, когда клавиатура сдвинула документ. Пишет не
+     чаще одного раза за кадр: раньше scrollTo вызывался на каждом событии
+     visualViewport.scroll, то есть по нескольку раз за кадр, и спорил с
+     собственной анимацией iOS — отсюда дёрганье.
+     glideTo() — плавный подвод поля. Свой твининг, а не behavior:'smooth':
+     иначе собственный pin перехватывал бы анимацию уже на следующем кадре. */
+  let lastPin=0;
+  function pin(){
+    if(!KB.on||KB.anim)return;
+    if(Math.abs(window.scrollY-KB.y)<2)return;
+    const now=performance.now();
+    if(now-lastPin<16)return;
+    lastPin=now; window.scrollTo(0,KB.y);
+  }
+  /* Сколько документ вообще может прокрутиться. Нужна, чтобы не дёргать scrollTo,
+     когда поле уже уперлось в низ страницы и выше его не поднять в принципе —
+     иначе твининг все 190 мс пишет одно и то же значение. */
+  function maxScroll(){
+    const de=document.documentElement,b=document.body;
+    const h=Math.max(de?de.scrollHeight:0,b?b.scrollHeight:0);
+    return Math.max(0,h-(window.innerHeight||9999));
+  }
+  function glideTo(y,ms){
+    y=Math.min(y,maxScroll());
+    const from=window.scrollY,d=y-from;
+    if(KB.anim){cancelAnimationFrame(KB.anim);KB.anim=0;}
+    if(Math.abs(d)<3){if(d!==0)window.scrollTo(0,y);return;}
+    const t0=performance.now();
+    (function step(now){
+      const p=Math.min(1,(now-t0)/ms),e=1-Math.pow(1-p,3);
+      window.scrollTo(0,Math.round(from+d*e));
+      KB.anim=(p<1)?requestAnimationFrame(step):0;
+    })(t0);
+  }
   function limit(){
     const vh=window.innerHeight||9999;
     const visB=(vv?((vv.offsetTop+vv.height)||vh):vh);
@@ -2306,31 +2365,40 @@ try{autoSnap()}catch(e){}
     return Math.min(visB,d?d.getBoundingClientRect().top:visB)-10;
   }
   /* Цель абсолютная: нижний край поля к границе видимой зоны. Повторный вызов
-     ничего не добавляет, а если документ дальше не скроллится — значение не растёт. */
+     ничего не добавляет, а если документ дальше не скроллится — значение не растёт.
+     Довод всегда плавный. Мгновенный скачок на первой же точке делал твининг
+     бессмысленным: поле уже стояло на месте раньше, чем анимация успевала начаться. */
   function nudge(){
     const el=KB.el; if(!el||!KB.on||!el.isConnected)return;
     const r=el.getBoundingClientRect(),lim=limit();
     if(r.bottom<=lim)return;
     const t=Math.max(KB.base,Math.round(window.scrollY+(r.bottom-lim)));
-    if(t===KB.y&&Math.round(window.scrollY)===t)return;
-    KB.y=t; window.scrollTo(0,t);
+    if(t===KB.y&&Math.abs(window.scrollY-t)<2)return;
+    KB.y=t; glideTo(t,190);
   }
   let preY=null,preT=0;
   document.addEventListener('pointerdown',e=>{
-    const el=e.target.closest?e.target.closest('.inp'):null;
+    const el=e.target.closest?e.target.closest('input,textarea,select,[contenteditable]'):null;
     if(el){ preY=window.scrollY; preT=Date.now(); }
   },true);
   document.addEventListener('focusin',e=>{
-    const el=e.target;
-    if(!el||!el.classList||!el.classList.contains('inp'))return;
-    KB.on=true; KB.el=el;
-    KB.base=KB.y=(preY!=null&&Date.now()-preT<900)?preY:window.scrollY;
+    if(!isField(e.target))return;
+    const again=KB.on&&KB.el===e.target;
+    KB.on=true; KB.el=e.target;
+    /* При повторном фокусе на то же поле базу не переписываем: иначе собственная
+       правка станет новой точкой отсчёта и поле уползёт ещё выше. */
+    if(!again)KB.base=KB.y=(preY!=null&&Date.now()-preT<900)?preY:window.scrollY;
+    /* Клавиатура встаёт не мгновенно: ловим её в нескольких точках, каждая —
+       отмена чужого сдвига плюс плавный довод поля к краю видимой зоны. */
     [0,50,120,260,460,700].forEach(t=>setTimeout(()=>{ pin(); if(t>=120) nudge(); },t));
   },true);
+  /* В textarea перенос строк увеличивает поле — низ уезжает под клавиатуру. */
+  document.addEventListener('input',e=>{ if(KB.on&&e.target===KB.el)nudge(); },true);
   document.addEventListener('focusout',e=>{
     const to=e.relatedTarget;
-    if(to&&to.classList&&to.classList.contains('inp')){ KB.el=to; KB.base=KB.y=window.scrollY; preY=null; return; }
+    if(to&&isField(to)){ KB.el=to; KB.base=KB.y=window.scrollY; preY=null; return; }
     KB.on=false; KB.el=null;
+    if(KB.anim){cancelAnimationFrame(KB.anim);KB.anim=0;}
   },true);
   if(vv){
     vv.addEventListener('resize',()=>{ if(!KB.on)return; pin(); requestAnimationFrame(()=>{ pin(); nudge(); }); });
