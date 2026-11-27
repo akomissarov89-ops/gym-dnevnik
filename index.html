@@ -1,8 +1,7 @@
 <!DOCTYPE html>
 <!--═══════════════════════════════════════════════════════════════════════════════
- ДНЕВНИК ТРЕНИРОВОК · PWA · v27
- Клавиатура: автоматическое перемещение нижней панели и автопрокрутка отключены.
- Поле может оставаться за клавиатурой; пользователь прокручивает форму вручную.
+ ДНЕВНИК ТРЕНИРОВОК · PWA · v28
+ Клавиатура: внутренний список учитывает видимую область; активное поле прокручивается внутри списка.
  Остальные функции сборки v22 сохранены.
 ══════════════════════════════════════════════════════════════════════════════-->
 <html lang="ru">
@@ -34,7 +33,7 @@
 --plan:#F2F7FA;--planWarm:#C6D0D6;--planDone:#DCE6EB;--planPrev:#57A9BE;
 --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,monospace;
 --sans:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",system-ui,sans-serif;
---hdr:150px;--dock:80px;--fixTop:158px;--fixBot:98px;--dCard:9px;--dSec:10px;--dRad:15px;--dSide:12px}
+--hdr:150px;--dock:80px;--fixTop:8px;--fixBot:14px;--kbInset:0px;--dCard:9px;--dSec:10px;--dRad:15px;--dSide:12px}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;height:100%;background:var(--bg)}
 body{color:var(--txt);font-family:var(--sans);font-size:15px;line-height:1.35;overscroll-behavior-y:none;-webkit-font-smoothing:antialiased}
@@ -115,7 +114,7 @@ body.cal-collapsed .cal-wrap{display:none}
 .chip.on.c2{background:linear-gradient(140deg,var(--cyan),#3e9bd6)}
 .chip.on.c3{background:linear-gradient(140deg,var(--violet),#7a63c4)}
 .chip.on.c0{background:linear-gradient(140deg,#9a8cf5,#6d5bc4)}
-.scroll{position:relative;z-index:2;padding:var(--fixTop) var(--dSide) var(--fixBot);max-width:720px;margin:0 auto;min-height:100vh}
+.scroll{position:fixed;z-index:2;top:var(--hdr);bottom:calc(var(--dock) + var(--kbInset));left:0;right:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior-y:contain;padding:var(--fixTop) var(--dSide) var(--fixBot);max-width:720px;margin:0 auto;min-height:0;scroll-padding-block:16px 24px}
 .sess-line{display:flex;align-items:center;gap:7px;margin-bottom:10px}
 .sess-line .t{font-size:14px;font-weight:750;letter-spacing:-.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .sess-line .s{font-size:10.5px;color:var(--txt3);font-family:var(--mono);flex:none}
@@ -867,7 +866,7 @@ if(ae&&/^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName))return;
 if(layoutBusy||!scrollEl||!hdrEl)return;layoutBusy=true;
 const hb=hdrEl.getBoundingClientRect().bottom,dh=dockEl?dockEl.getBoundingClientRect().height:80;
 root.style.setProperty('--hdr',hb+'px');root.style.setProperty('--dock',dh+'px');
-root.style.setProperty('--fixTop',(hb+L.top)+'px');root.style.setProperty('--fixBot',(dh+L.bot)+'px');
+root.style.setProperty('--fixTop',L.top+'px');root.style.setProperty('--fixBot',L.bot+'px');
 root.style.setProperty('--dCard',L.card+'px');root.style.setProperty('--dSec',(L.card+1)+'px');
 root.style.setProperty('--dRad',L.rad+'px');root.style.setProperty('--dSide',L.side+'px');
 cleanEmpties();diag(hb);layoutBusy=false}
@@ -2303,9 +2302,9 @@ try{autoSnap()}catch(e){}
 <script>
 "use strict";
 /* ─── 1. КЛАВИАТУРА iOS: НАТИВНОЕ ПОВЕДЕНИЕ ───────────────────────────────
-   v27: сохраняется положение страницы до фокуса и восстанавливается после blur.
-   Клавиатура может перекрывать активное поле; пользователь прокручивает
-   содержимое вручную. Никаких обработчиков visualViewport/focus для этого нет.
+   v28: основной список — отдельная прокручиваемая область между шапкой и доком.
+   При появлении клавиатуры учитываем visualViewport и прокручиваем активное поле
+   только внутри списка, не меняя положение документа и закреплённых элементов.
 */
 
 /* ─── 1a. ЗАКРЫТИЕ КЛАВИАТУРЫ ПРИ КАСАНИИ ВНЕ ПОЛЯ ────────────────────────
@@ -2320,6 +2319,25 @@ try{autoSnap()}catch(e){}
      страницы до фокуса и возвращаем его после blur/закрытия клавиатуры.
      Никакой автопрокрутки к полю не выполняем. */
   let pageY=null, restoreToken=0, restoring=false;
+  const root=document.documentElement, scroller=document.getElementById('scroll');
+  let keyboardOpen=false, focusTimer=0;
+  function viewportInset(){
+    if(!window.visualViewport){root.style.setProperty('--kbInset','0px');return 0;}
+    const vv=window.visualViewport;
+    const inset=Math.max(0,Math.round(window.innerHeight-vv.height-vv.offsetTop));
+    root.style.setProperty('--kbInset',inset+'px');
+    keyboardOpen=inset>100;
+    return inset;
+  }
+  function revealActive(){
+    const el=document.activeElement;if(!keyboardOpen||!scroller||!el||!el.matches||!el.matches(editable)||!scroller.contains(el))return;
+    const r=el.getBoundingClientRect(),sr=scroller.getBoundingClientRect();
+    const vv=window.visualViewport, visibleBottom=Math.min(sr.bottom,vv?vv.offsetTop+vv.height:window.innerHeight);
+    const margin=18;
+    if(r.bottom>visibleBottom-margin)scroller.scrollTop+=r.bottom-(visibleBottom-margin);
+    else if(r.top<sr.top+margin)scroller.scrollTop-=sr.top+margin-r.top;
+  }
+  function syncKeyboard(){viewportInset();requestAnimationFrame(()=>requestAnimationFrame(revealActive));}
   function restorePage(){
     if(pageY===null||restoring)return;
     restoring=true;
@@ -2333,19 +2351,23 @@ try{autoSnap()}catch(e){}
   }
   document.addEventListener('focusin',function(e){
     if(e.target&&e.target.matches&&e.target.matches(editable)){
+      clearTimeout(focusTimer);
+      focusTimer=setTimeout(syncKeyboard,180);
       clearTimeout(restoreToken);
       if(pageY===null)pageY=window.scrollY||window.pageYOffset||0;
     }
   },true);
   document.addEventListener('focusout',function(e){
     if(e.target&&e.target.matches&&e.target.matches(editable)){
-      setTimeout(()=>{if(!document.activeElement||!document.activeElement.matches||!document.activeElement.matches(editable))restorePage();},0);
+      setTimeout(()=>{if(!document.activeElement||!document.activeElement.matches||!document.activeElement.matches(editable)){keyboardOpen=false;root.style.setProperty('--kbInset','0px');restorePage();}},0);
     }
   },true);
   if(window.visualViewport){
     window.visualViewport.addEventListener('resize',function(){
-      if(pageY!==null&&!document.activeElement?.matches?.(editable))restorePage();
+      if(document.activeElement&&document.activeElement.matches&&document.activeElement.matches(editable))syncKeyboard();
+      else {keyboardOpen=false;root.style.setProperty('--kbInset','0px');if(pageY!==null)restorePage();}
     },{passive:true});
+    window.visualViewport.addEventListener('scroll',()=>{if(keyboardOpen)requestAnimationFrame(revealActive)},{passive:true});
   }
   document.addEventListener('pointerdown',function(e){
     const active=document.activeElement;
