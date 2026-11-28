@@ -2512,6 +2512,23 @@ try{autoSnap()}catch(e){}
   } catch(e) { console.error('Excel workbook import failed',e); }
 })();
 </script>
-
+<script>
+/* Разовая чистка служебных строк: NaN.NaN.NaN в «Часах» и «Решение — Значение» · v1 */
+(function(){
+try{
+if(typeof S==='undefined'||typeof save!=='function')return;
+if(localStorage.getItem('gymDiary.cleanup.serviceRows.v1')==='done')return;
+const isDate=k=>/^\d{4}-\d{2}-\d{2}$/.test(k);
+const junkDec=d=>d&&d.t==='Решение'&&d.v==='Значение';
+let n=0;
+Object.keys(S.watch||{}).forEach(k=>{if(!isDate(k)){delete S.watch[k];n++}});
+if(Array.isArray(S.decisions)){const b=S.decisions.length;S.decisions=S.decisions.filter(d=>!junkDec(d));n+=b-S.decisions.length}
+if(typeof DECISIONS!=='undefined'){for(let i=DECISIONS.length-1;i>=0;i--)if(junkDec(DECISIONS[i]))DECISIONS.splice(i,1)}
+if(Array.isArray(S.summary)){const b=S.summary.length;S.summary=S.summary.filter(t=>String(t).trim()!=='Сводка'&&!/^\d{2}\.\d{2}\.\d{4}$/.test(String(t).trim()));n+=b-S.summary.length}
+localStorage.setItem('gymDiary.cleanup.serviceRows.v1','done');
+if(n){save();renderAll();setTimeout(()=>{try{toast('Чистка: убрано служебных строк — '+n)}catch(e){}},1600)}
+}catch(e){console.error('service rows cleanup failed',e)}
+})();
+</script>
 </body>
 </html>
